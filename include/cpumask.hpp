@@ -2,6 +2,7 @@
 #define _CPUMASK_H 
 
 #include <string.h>
+#include "../lib/bitmap.hpp"
 
 class cpumask { 
     public:
@@ -30,7 +31,7 @@ class cpumask {
             return find_first_bit(bits, 64);
         }
         int test_cpu(int n) {
-            return test_bit(n, bits);
+            return test_bit(n, bits, 64);
         }
 
 
