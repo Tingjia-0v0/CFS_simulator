@@ -29,12 +29,21 @@ class cpumask {
         unsigned int first() {
             return find_first_bit(bits, 64);
         }
+        int test_cpu(int n) {
+            return test_bit(n, bits);
+        }
+
+
         static unsigned int cpumask_weight(const cpumask * src) {
             return bitmap_weight(src->bits, 64);
         }
         /* return 0 if dst is empty; else return 1 */
         static int cpumask_and(cpumask * dst, const cpumask * src1, const cpumask * src2) {
             return bitmap_and(dst->bits, src1->bits, src2->bits, 64);
+        }
+
+        static int cpumask_or(cpumask * dst, const cpumask * src1, const cpumask * src2) {
+            return bitmap_or(dst->bits, src1->bits, src2->bits, 64);
         }
 
         static int cpumask_first(const cpumask * src) {
@@ -44,6 +53,8 @@ class cpumask {
         static int cpumask_equal(const cpumask *src1, const cpumask * src2) {
             return bitmap_equal(src1->bits, src2->bits, 64);
         }
+
+        
 };
 
 #endif

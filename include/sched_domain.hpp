@@ -4,8 +4,7 @@
 # include <vector>
 # include "sched_group.hpp"
 # include "cpu.hpp"
-
-
+# include "jiffies.hpp"
 
 #define SD_LOAD_BALANCE		0x0001	/* Do load balancing on this domain. */
 #define SD_BALANCE_NEWIDLE	0x0002	/* Balance when about to become idle */
@@ -30,7 +29,6 @@
 
 /* TODO: Need to intialize at the main function */
 extern int sched_domain_level_max;
-extern int HZ = 250;
 extern unsigned long max_load_balance_interval = HZ*num_online_cpus()/10;
 
 class sched_domain {
@@ -126,7 +124,7 @@ class sched_domain {
             
             for (int i = cpu; i != cpu; i = span->next(i)) {
                 sched_group * sg;
-                if (cpumask::cpumask_test_cpu(i, covered)) 
+                if (covered->test_cpu(i)) 
                     continue;
                 sg = get_group(i);
                 cpumask::cpumask_or(covered, covered, sg->span);

@@ -1,6 +1,8 @@
 # include <vector>
 # include "sched_domain.hpp"
 # include "cpumask.hpp"
+# include "runqueue.hpp"
+# include "jiffies.hpp"
 
 struct s_data {
 	std::vector<sched_domain *> sd;
@@ -41,7 +43,7 @@ class sched {
                     tmp_sd->build_sched_groups(cpu);
 
             for (int cpu = 63; cpu >= 0 ; cpu --) {
-                if (!cpumask::cpumask_test_cpu(cpu, cpu_map))
+                if (!(cpu_map->test_cpu(cpu)))
                     continue;
                 
                 for ( tmp_sd = d.sd[cpu]; tmp_sd; tmp_sd = tmp_sd->parent ) {
@@ -67,7 +69,7 @@ class sched {
             unsigned long capacity, min_capacity;
             unsigned long interval;
             interval = msecs_to_jiffies(sd->balance_interval);
-            interval = clamp(interval, 1UL, max_load_balance_interval);
+            interval = std::min(std::max(interval, 1UL), max_load_balance_interval);
             sd->groups->sgc->next_update = jiffies + interval;
 
             if (!sd->child) {
@@ -85,9 +87,9 @@ class sched {
                 sched_group_capacity *sgc = tmp_group->sgc;
 
                 capacity += sgc->capacity;
-                min_capacity = min(sgc->min_capacity, min_capacity);
+                min_capacity = std::min(sgc->min_capacity, min_capacity);
                 tmp_group = tmp_group->next;
-            } while (tmp_group != child->groups);
+            } while (tmp_group != sd->child->groups);
 
             sd->groups->sgc->capacity = capacity;
             sd->groups->sgc->min_capacity = min_capacity;
