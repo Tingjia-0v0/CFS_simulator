@@ -1,6 +1,4 @@
-# include <vector>
 # include "sched_domain.hpp"
-# include "cpumask.hpp"
 # include "runqueue.hpp"
 # include "jiffies.hpp"
 
@@ -14,6 +12,12 @@ class sched {
         std::vector<rq *> runqueues;
     public:
         sched() {
+            for(int i = 0; i < 64; i++) {
+                if (cpu_online_mask->test_cpu(i))
+                    runqueues.push_back(new rq(i));
+                else
+                    runqueues.push_back(NULL);
+            }
             sched_init_domains(cpu_online_mask);
         }
     private:

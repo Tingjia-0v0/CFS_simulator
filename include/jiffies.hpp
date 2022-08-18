@@ -5,7 +5,7 @@
 
 # define MAX_JIFFY_OFFSET   ((LONG_MAX >> 1)-1)
 
-extern unsigned long jiffies;
+unsigned long jiffies;
 
 static inline unsigned long _msecs_to_jiffies(const unsigned int m)
 {

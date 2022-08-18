@@ -2,6 +2,7 @@
 #define _CPUMASK_H 
 
 #include <string.h>
+#include <iostream>
 #include "../lib/bitmap.hpp"
 
 class cpumask { 
@@ -33,7 +34,14 @@ class cpumask {
         int test_cpu(int n) {
             return test_bit(n, bits, 64);
         }
-
+        void set(int n) {
+            bits[n] = 1;
+        }
+        void debug_print_cpumask() {
+            for (int i = 0; i < 64; i++)
+                if (bits[i] != 0) std::cout << i << " ";
+            std::cout << std::endl;
+        }
 
         static unsigned int cpumask_weight(const cpumask * src) {
             return bitmap_weight(src->bits, 64);
