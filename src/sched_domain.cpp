@@ -1,5 +1,9 @@
-# include "include/sched.hpp"
+
 # include "sched_domain.hpp"
+
+int sched_domain_level_max;
+unsigned long max_load_balance_interval;
+
 
 sched_domain::sched_domain(sched_domain_topology_level * tl, const cpumask * cpu_map, sched_domain * _child, int cpu) {
     int sd_id, sd_weight, sd_flags = 0;
@@ -78,18 +82,4 @@ sched_group * sched_domain::get_group(int cpu) {
     sg->sgc->min_capacity = SCHED_CAPACITY_SCALE;
 
     return sg;
-}
-
-
-
-int main(int argc, char *argv[])
-{
-    cpu_online_mask = new cpumask();
-    for (int i = 0; i < 64; i++) cpu_topology.push_back(NULL);
-    init_cpus();
-    debug_cputopo();
-    max_load_balance_interval = HZ * num_online_cpus()/10;
-
-    sched * global_sched = new sched();
-
 }

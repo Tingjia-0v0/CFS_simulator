@@ -1,5 +1,4 @@
-#ifndef _BITMAP_H
-#define _BITMAP_H
+#include "bitmap.hpp"
 
 /* treat the bitmap as a circular list and find the next setted bit
  * offset should be a number between 0 and size */
@@ -56,6 +55,3 @@ int bitmap_equal(const unsigned long *src1, const unsigned long *src2,
     }
     return 1;
 }
-
-
-#endif

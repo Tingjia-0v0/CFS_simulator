@@ -28,8 +28,8 @@
 # define SCHED_CAPACITY_SCALE	(1L << SCHED_CAPACITY_SHIFT)
 
 /* TODO: Need to intialize at the main function */
-int sched_domain_level_max;
-unsigned long max_load_balance_interval;
+extern int sched_domain_level_max;
+extern unsigned long max_load_balance_interval;
 
 class sched_domain_topology_level;
 

@@ -3,7 +3,7 @@
 
 #include <string.h>
 #include <iostream>
-#include "../lib/bitmap.hpp"
+#include "bitmap.hpp"
 
 class cpumask { 
     public:
