@@ -5,6 +5,7 @@
 # include "sched_group.hpp"
 # include "cpu.hpp"
 # include "jiffies.hpp"
+# include <iostream>
 
 #define SD_LOAD_BALANCE		0x0001	/* Do load balancing on this domain. */
 #define SD_BALANCE_NEWIDLE	0x0002	/* Balance when about to become idle */
@@ -75,8 +76,8 @@ class sched_domain {
         int build_sched_groups(int cpu) {
             sched_group * first = NULL, * last = NULL;
             cpumask * covered = new cpumask();
-            
-            for (int i = cpu; i != cpu; i = span->next(i)) {
+            int i;
+            for_each_cpu_from(i, span, cpu - 1) {
                 sched_group * sg;
                 if (covered->test_cpu(i)) 
                     continue;
@@ -96,6 +97,23 @@ class sched_domain {
         }
 
         sched_group * get_group(int cpu);
+
+        void debug_sched_domain(int _level) {
+            for(int i = 0; i < _level; i++) std::cout << "\t";
+            std::cout << "Sched_domain at level: " << level << std::endl;
+            for(int i = 0; i < _level; i++) std::cout << "\t";
+            std::cout << "span: ";
+            int cpu;
+            for_each_cpu(cpu, span) {
+                std::cout << cpu << " ";
+            }
+            std::cout << "\n" ;
+            sched_group * tmp_group;
+            int first;
+            for(first = 1, tmp_group = groups; (tmp_group!= groups || first) && tmp_group != NULL; tmp_group = tmp_group->next, first = 0) {
+                tmp_group->debug_sched_group(_level + 1);
+            }
+        }
 
         
 };

@@ -25,8 +25,7 @@ class cpumask {
         /* This function will return the next cpu starting from n 
          * If it reaches the end, it will return the first cpu */
         unsigned int next(int n) {
-            // return 0;
-            return find_next_bit(bits, 64, n + 1);
+            return find_next_bit(bits, 64, n);
         }
         unsigned int first() {
             return find_first_bit(bits, 64);

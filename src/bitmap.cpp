@@ -1,21 +1,22 @@
 #include "bitmap.hpp"
+#include <iostream>
 
 /* treat the bitmap as a circular list and find the next setted bit
  * offset should be a number between 0 and size */
-unsigned long find_next_bit(const unsigned long *addr, unsigned long size,
-			    unsigned long offset)
+long find_next_bit(unsigned long *addr, unsigned long size,
+			    long offset)
 {
-	for (unsigned long i = (offset + 1) % size; i != offset; i = (i+1) % size) {
+	for (long i = (offset + 1) % size; i != offset; i = (i+1) % size) {
         if (addr[i] != 0) return i;
     }
-    return size + 1;
+    return -1;
 }
 
-unsigned long find_first_bit(const unsigned long *addr, unsigned long size) {
+long find_first_bit(const unsigned long *addr, unsigned long size) {
     for (unsigned long i = 0; i < size; i++) {
         if (addr[i] != 0) return i;
     }
-    return size + 1;
+    return -1;
 }
 
 int test_bit(unsigned long offset, const unsigned long *addr, unsigned long size) {

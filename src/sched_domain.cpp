@@ -38,19 +38,22 @@ sched_domain::sched_domain(sched_domain_topology_level * tl, const cpumask * cpu
 
     child = _child;
 
+    span = new cpumask();
     cpumask::cpumask_and(span, cpu_map, tl->mask(cpu));
     span_weight = cpumask::cpumask_weight(span);
     sd_id = cpumask::cpumask_first(span);
 
     /* TODO: initilization for further flags */
-
+        
     if (child) {
         level = child->level + 1;
         sched_domain_level_max = std::max(sched_domain_level_max, level);
         child->parent = this;
     }
+    parent = NULL;
 
     /* Set the per cpu sd pointer of topology level */
+
     tl->sd[cpu] = this;
 
 }

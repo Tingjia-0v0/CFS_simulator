@@ -8,7 +8,6 @@ struct s_data {
 
 class sched {
     public:
-        // struct cpumask * cpu_online_mask;
         std::vector<rq *> runqueues;
     public:
         sched() {
@@ -20,14 +19,26 @@ class sched {
             }
             sched_init_domains(cpu_online_mask);
         }
+        void debug_sched(int _level) {
+            std::cout << "Sched domains for each cpu" << std::endl;
+            int cpu;
+            for_each_cpu(cpu, cpu_online_mask) {
+                std::cout << "cpu: " << cpu << std::endl;
+                sched_domain * tmp_sd;
+                for(tmp_sd = runqueues[cpu]->sd; tmp_sd; tmp_sd = tmp_sd->parent) {
+                    tmp_sd->debug_sched_domain(1);
+                }
+            } 
+        }
     private:
         int sched_init_domains(cpumask * cpu_map) {
             sched_domain * tmp_sd;
             struct s_data d;
             for (int i = 0; i < 64; i++) d.sd.push_back(NULL);
             rq * tmp_rq = NULL;
+            int cpu;
             
-            for (int cpu = cpu_map->first(); cpu != cpu_map->first(); cpu = cpu_map->next(cpu)) {
+            for_each_cpu(cpu, cpu_map) {
                 int bottom = 1;
                 tmp_sd = NULL;
                 for(auto &tl : default_topology) {
@@ -42,9 +53,10 @@ class sched {
                 }
             }
 
-            for (int cpu = cpu_map->first(); cpu != cpu_map->first(); cpu = cpu_map->next(cpu)) 
+            for_each_cpu(cpu, cpu_map) {
                 for (tmp_sd = d.sd[cpu]; tmp_sd; tmp_sd = tmp_sd->parent) 
                     tmp_sd->build_sched_groups(cpu);
+            }
 
             for (int cpu = 63; cpu >= 0 ; cpu --) {
                 if (!(cpu_map->test_cpu(cpu)))
@@ -58,7 +70,7 @@ class sched {
 
             /* TODO: get the lock */
 
-            for (int cpu = cpu_map->first(); cpu != cpu_map->first(); cpu = cpu_map->next(cpu)) {
+            for_each_cpu(cpu, cpu_map) {
                 tmp_sd = d.sd[cpu];
                 cpu_attach_domain(tmp_sd, cpu);
             }
@@ -89,9 +101,8 @@ class sched {
             tmp_group = sd->child->groups;
             do {
                 sched_group_capacity *sgc = tmp_group->sgc;
-
                 capacity += sgc->capacity;
-                min_capacity = std::min(sgc->min_capacity, min_capacity);
+                min_capacity = std::min(sgc->capacity, min_capacity);
                 tmp_group = tmp_group->next;
             } while (tmp_group != sd->child->groups);
 

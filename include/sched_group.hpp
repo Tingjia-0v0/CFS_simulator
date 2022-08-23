@@ -2,6 +2,8 @@
 #define _SCHED_GROUP_H
 
 # include "cpumask.hpp"
+# include "util.hpp"
+# include <iostream>
 
 class sched_group_capacity {
 	public: 
@@ -21,7 +23,6 @@ class sched_group_capacity {
 			span = NULL;
 		}
 
-
 };
 
 class sched_group {
@@ -37,6 +38,18 @@ class sched_group {
 			group_weight = asym_prefer_cpu = 0;
 			sgc = new sched_group_capacity();
 			span = NULL;
+		}
+
+		void debug_sched_group(int _level) {
+			int cpu;
+			for(int i = 0; i < _level; i++)
+				std::cout << "\t";
+			for_each_cpu(cpu, span) {
+				std::cout << cpu << " ";
+			}
+			std::cout << ": ";
+			std::cout << sgc->capacity << " " << sgc->min_capacity;
+			std::cout << " " << std::endl;
 		}
 
 };
