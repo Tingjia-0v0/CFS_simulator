@@ -13,6 +13,7 @@ class sched {
 
     public:
         sched(const std::string & filename) {
+
             init_cpus(filename);
 
             max_load_balance_interval = HZ * num_online_cpus()/10;
@@ -24,6 +25,7 @@ class sched {
                 else
                     runqueues.push_back(NULL);
             }
+            
             sched_init_domains(cpu_online_mask);
             
         }
