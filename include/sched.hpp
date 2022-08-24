@@ -2,10 +2,6 @@
 # include "runqueue.hpp"
 # include "jiffies.hpp"
 
-struct s_data {
-	std::vector<sched_domain *> sd;
-};
-
 class sched {
     public:
         std::vector<rq *> runqueues;
@@ -16,12 +12,13 @@ class sched {
         int sched_domain_level_max;
 
     public:
-        sched() {
-            init_cpus();
+        sched(const std::string & filename) {
+            init_cpus(filename);
 
             max_load_balance_interval = HZ * num_online_cpus()/10;
+            sched_domain_level_max = -1;
 
-            for(int i = 0; i < 64; i++) {
+            for(int i = 0; i < NR_CPU; i++) {
                 if (cpu_online_mask->test_cpu(i))
                     runqueues.push_back(new rq(i));
                 else
@@ -32,6 +29,8 @@ class sched {
         }
 
         void debug_sched(int _level) {
+            std::cout << "Sched max level: " << sched_domain_level_max << std::endl;
+            debug_cputopo();
             std::cout << "Sched domains for each cpu" << std::endl;
             int cpu;
             for_each_cpu(cpu, cpu_online_mask) {
@@ -43,53 +42,33 @@ class sched {
             } 
         }
 
-        void debug_cputopo() {
-            std::cout << "cpu_online_mask: ";
-            cpu_online_mask->debug_print_cpumask();
-            std::cout << std::endl;
-            for (auto & cpu : cpu_topology) {
-                std::cout << cpu->thread_id << ":" << std::endl;
-                std::cout << "\tcoreid: " << cpu->core_id << " thread_id: " << cpu->socket_id << std::endl;
-                std::cout << "\tthread_sibling: ";
-                cpu->thread_sibling->debug_print_cpumask();
-                std::cout << "\tcore_sibling: ";
-                cpu->core_sibling->debug_print_cpumask();
-            }
-            /* print cpu_online_mask and cpu_topology */
-        }
     private:
         int sched_init_domains(cpumask * cpu_map) {
             sched_domain * tmp_sd;
-            struct s_data d;
-            for (int i = 0; i < 64; i++) d.sd.push_back(NULL);
-            rq * tmp_rq = NULL;
+            std::vector<sched_domain *> d;
+            for (int i = 0; i < NR_CPU; i++) d.push_back(NULL);
             int cpu;
             
             for_each_cpu(cpu, cpu_map) {
-                int bottom = 1;
                 tmp_sd = NULL;
                 for(auto &tl : default_topology) {
-                    // tl with type: sched_domain_topology_level 
                     tmp_sd = new sched_domain(&tl, cpu_map, tmp_sd, cpu, cpu_online_mask, cpu_topology, sched_domain_level_max);
-                    if (bottom == 1) {
-                        d.sd[cpu] = tmp_sd;
-                        bottom = 0;
-                    }
                     if (cpumask::cpumask_equal(cpu_map, tmp_sd->span))
                         break;
                 }
+                d[cpu] = default_topology[0].sd[cpu];
             }
 
             for_each_cpu(cpu, cpu_map) {
-                for (tmp_sd = d.sd[cpu]; tmp_sd; tmp_sd = tmp_sd->parent) 
+                for (tmp_sd = d[cpu]; tmp_sd; tmp_sd = tmp_sd->parent) 
                     tmp_sd->build_sched_groups(cpu);
             }
 
-            for (int cpu = 63; cpu >= 0 ; cpu --) {
+            for (int cpu = NR_CPU - 1; cpu >= 0 ; cpu --) {
                 if (!(cpu_map->test_cpu(cpu)))
                     continue;
                 
-                for ( tmp_sd = d.sd[cpu]; tmp_sd; tmp_sd = tmp_sd->parent ) {
+                for ( tmp_sd = d[cpu]; tmp_sd; tmp_sd = tmp_sd->parent ) {
                     if (cpu == cpumask::cpumask_first(tmp_sd->groups->sgc->span))
                         update_group_capacity(cpu, tmp_sd);
                 }
@@ -97,12 +76,10 @@ class sched {
 
             /* TODO: get the lock */
 
-            for_each_cpu(cpu, cpu_map) {
-                tmp_sd = d.sd[cpu];
-                cpu_attach_domain(tmp_sd, cpu);
-            }
-            return 0;
+            for_each_cpu(cpu, cpu_map) 
+                cpu_attach_domain(d[cpu], cpu);
 
+            return 0;
         }
 
         void update_group_capacity(int cpu, sched_domain * sd) {
@@ -151,9 +128,9 @@ class sched {
             cpumask::cpumask_weight(cpu_online_mask);
         }
 
-        void init_cpus() {
-            for (int i = 0; i < 64; i++) cpu_topology.push_back(NULL);
-            std::ifstream ifs("/users/Tingjia/CFS_simulator/arch/lscpu_parsed.json");
+        void init_cpus(const std::string & filename) {
+            for (int i = 0; i < NR_CPU; i++) cpu_topology.push_back(NULL);
+            std::ifstream ifs(filename);
             json data = json::parse(ifs);
             const auto& arr = data["online_cpu_masks"]; 
             for(auto & i : arr){
@@ -167,6 +144,21 @@ class sched {
                 for(auto & i: el.value()["core_sibling"])
                     cpu_topology[std::stoi(el.key())]->core_sibling->set(i);
             }
+        }
+
+        void debug_cputopo() {
+            std::cout << "cpu_online_mask: ";
+            cpu_online_mask->debug_print_cpumask();
+            std::cout << std::endl;
+            for (auto & cpu : cpu_topology) {
+                std::cout << cpu->thread_id << ":" << std::endl;
+                std::cout << "\tcoreid: " << cpu->core_id << " thread_id: " << cpu->socket_id << std::endl;
+                std::cout << "\tthread_sibling: ";
+                cpu->thread_sibling->debug_print_cpumask();
+                std::cout << "\tcore_sibling: ";
+                cpu->core_sibling->debug_print_cpumask();
+            }
+            /* print cpu_online_mask and cpu_topology */
         }
 
 };

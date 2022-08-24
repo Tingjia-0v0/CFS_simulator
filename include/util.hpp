@@ -5,6 +5,7 @@
 # define LONG_MAX   ((long)(~0UL>>1))
 # define MSEC_PER_SEC       1000
 # define HZ                 250
+# define NR_CPU             64
 
 # define for_each_cpu(cpu, mask)	\
     for (int _first = 1, cpu = mask->first(); \

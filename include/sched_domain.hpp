@@ -164,7 +164,7 @@ class sched_domain_topology_level {
             mask = _mask;
             sd_flags = _sd_flags;
             flags = 0;
-            for (int i = 0; i < 64; i++) {
+            for (int i = 0; i < NR_CPU; i++) {
                 sd.push_back(NULL);
                 sg.push_back(new sched_group());
                 sgc.push_back(new sched_group_capacity());
