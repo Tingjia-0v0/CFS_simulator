@@ -1,14 +1,13 @@
 
 # include "sched_domain.hpp"
 
-int sched_domain_level_max;
-unsigned long max_load_balance_interval;
-
-
-sched_domain::sched_domain(sched_domain_topology_level * tl, const cpumask * cpu_map, sched_domain * _child, int cpu) {
+sched_domain::sched_domain(sched_domain_topology_level * tl, const cpumask * cpu_map, 
+                           sched_domain * _child, int cpu,
+                           cpumask * cpu_online_mask, std::vector<cputopo *> & cpu_topology,
+                           int & sched_domain_level_max) {
     int sd_id, sd_weight, sd_flags = 0;
     /* how many cpus in this domain */
-    sd_weight = cpumask::cpumask_weight(tl->mask(cpu));
+    sd_weight = cpumask::cpumask_weight(tl->mask(cpu, cpu_online_mask, cpu_topology));
     if (tl->sd_flags) sd_flags = tl->sd_flags();
 
     /* interval in milliseconds */
@@ -39,7 +38,7 @@ sched_domain::sched_domain(sched_domain_topology_level * tl, const cpumask * cpu
     child = _child;
 
     span = new cpumask();
-    cpumask::cpumask_and(span, cpu_map, tl->mask(cpu));
+    cpumask::cpumask_and(span, cpu_map, tl->mask(cpu, cpu_online_mask, cpu_topology));
     span_weight = cpumask::cpumask_weight(span);
     sd_id = cpumask::cpumask_first(span);
 

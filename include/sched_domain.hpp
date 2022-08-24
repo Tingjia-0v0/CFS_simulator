@@ -28,10 +28,6 @@
 # define SCHED_CAPACITY_SHIFT	SCHED_FIXEDPOINT_SHIFT
 # define SCHED_CAPACITY_SCALE	(1L << SCHED_CAPACITY_SHIFT)
 
-/* TODO: Need to intialize at the main function */
-extern int sched_domain_level_max;
-extern unsigned long max_load_balance_interval;
-
 class sched_domain_topology_level;
 
 class sched_domain {
@@ -69,7 +65,10 @@ class sched_domain {
         sched_domain_topology_level * topology_level;
 
     public:
-        sched_domain(sched_domain_topology_level * tl, const cpumask * cpu_map, sched_domain * _child, int cpu);
+        sched_domain(sched_domain_topology_level * tl, const cpumask * cpu_map, 
+                     sched_domain * _child, int cpu,
+                     cpumask * cpu_online_mask, std::vector<cputopo *> & cpu_topology,
+                     int & sched_domain_level_max);
 
         /* sched_group is shared by cpus in the same group on sd */
 
@@ -130,23 +129,23 @@ static inline int cpu_node_flags(void) {
 }
 
 /* cpu topology mask functions */
-static inline const cpumask * cpu_smt_mask(int cpu) {
+static inline const cpumask * cpu_smt_mask(int cpu, cpumask * cpu_online_mask, std::vector<cputopo *> & cpu_topology) {
     cpumask * smt_mask = new cpumask(cpu_topology[cpu]->get_smt_mask());
     int emp = cpumask::cpumask_and(smt_mask, smt_mask, cpu_online_mask);
     return smt_mask;
 }
-static inline const cpumask * cpu_coregroup_mask(int cpu) {
+static inline const cpumask * cpu_coregroup_mask(int cpu, cpumask * cpu_online_mask, std::vector<cputopo *> & cpu_topology) {
     cpumask * coregroup_mask = new cpumask(cpu_topology[cpu]->get_coregroup_mask());
     int emp = cpumask::cpumask_and(coregroup_mask, coregroup_mask, cpu_online_mask);
     return coregroup_mask;
 }
-static inline const cpumask * cpu_cpu_mask(int cpu) {
+static inline const cpumask * cpu_cpu_mask(int cpu, cpumask * cpu_online_mask, std::vector<cputopo *> & cpu_topology) {
     return cpu_online_mask;
 }
 
 
 
-typedef const cpumask * (*sched_domain_mask_f)(int cpu);
+typedef const cpumask * (*sched_domain_mask_f)(int cpu, cpumask * cpu_online_mask, std::vector<cputopo *> & cpu_topology);
 typedef int (*sched_domain_flags_f)(void);
 
 class sched_domain_topology_level {

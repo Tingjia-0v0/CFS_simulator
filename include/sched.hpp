@@ -9,8 +9,18 @@ struct s_data {
 class sched {
     public:
         std::vector<rq *> runqueues;
+        std::vector<cputopo *> cpu_topology;
+        cpumask * cpu_online_mask;
+
+        unsigned long max_load_balance_interval;
+        int sched_domain_level_max;
+
     public:
         sched() {
+            init_cpus();
+
+            max_load_balance_interval = HZ * num_online_cpus()/10;
+
             for(int i = 0; i < 64; i++) {
                 if (cpu_online_mask->test_cpu(i))
                     runqueues.push_back(new rq(i));
@@ -18,7 +28,9 @@ class sched {
                     runqueues.push_back(NULL);
             }
             sched_init_domains(cpu_online_mask);
+            
         }
+
         void debug_sched(int _level) {
             std::cout << "Sched domains for each cpu" << std::endl;
             int cpu;
@@ -29,6 +41,21 @@ class sched {
                     tmp_sd->debug_sched_domain(1);
                 }
             } 
+        }
+
+        void debug_cputopo() {
+            std::cout << "cpu_online_mask: ";
+            cpu_online_mask->debug_print_cpumask();
+            std::cout << std::endl;
+            for (auto & cpu : cpu_topology) {
+                std::cout << cpu->thread_id << ":" << std::endl;
+                std::cout << "\tcoreid: " << cpu->core_id << " thread_id: " << cpu->socket_id << std::endl;
+                std::cout << "\tthread_sibling: ";
+                cpu->thread_sibling->debug_print_cpumask();
+                std::cout << "\tcore_sibling: ";
+                cpu->core_sibling->debug_print_cpumask();
+            }
+            /* print cpu_online_mask and cpu_topology */
         }
     private:
         int sched_init_domains(cpumask * cpu_map) {
@@ -43,7 +70,7 @@ class sched {
                 tmp_sd = NULL;
                 for(auto &tl : default_topology) {
                     // tl with type: sched_domain_topology_level 
-                    tmp_sd = new sched_domain(&tl, cpu_map, tmp_sd, cpu);
+                    tmp_sd = new sched_domain(&tl, cpu_map, tmp_sd, cpu, cpu_online_mask, cpu_topology, sched_domain_level_max);
                     if (bottom == 1) {
                         d.sd[cpu] = tmp_sd;
                         bottom = 0;
@@ -120,5 +147,26 @@ class sched {
             runqueues[cpu]->sd = sd;
         }
 
+        int num_online_cpus() {
+            cpumask::cpumask_weight(cpu_online_mask);
+        }
+
+        void init_cpus() {
+            for (int i = 0; i < 64; i++) cpu_topology.push_back(NULL);
+            std::ifstream ifs("/users/Tingjia/CFS_simulator/arch/lscpu_parsed.json");
+            json data = json::parse(ifs);
+            const auto& arr = data["online_cpu_masks"]; 
+            for(auto & i : arr){
+                cpu_online_mask->set(i);
+            }
+            const auto & dict = data["cpu_topots"];
+            for (auto& el : dict.items()) {
+                cpu_topology[std::stoi(el.key())] = new cputopo(el.value()["thread_id"], el.value()["core_id"], el.value()["socket_id"]);
+                for(auto & i: el.value()["thread_sibling"])
+                    cpu_topology[std::stoi(el.key())]->thread_sibling->set(i);
+                for(auto & i: el.value()["core_sibling"])
+                    cpu_topology[std::stoi(el.key())]->core_sibling->set(i);
+            }
+        }
 
 };

@@ -32,15 +32,4 @@ class cputopo {
         }
 };
 
-
-extern std::vector<cputopo *> cpu_topology;
-extern cpumask * cpu_online_mask;
-
-int num_online_cpus();
-
-void init_cpus();
-
-void debug_cputopo();
-
-
 #endif
