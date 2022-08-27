@@ -1,6 +1,10 @@
+# ifndef _SIM_SCHED_H
+# define _SIM_SCHED_H
+
 # include "sched_domain.hpp"
 # include "runqueue.hpp"
 # include "jiffies.hpp"
+# include "task.hpp"
 
 class sched {
     public:
@@ -10,6 +14,8 @@ class sched {
 
         unsigned long max_load_balance_interval;
         int sched_domain_level_max;
+
+        int cur_pid = 0; 
 
     public:
         sched(const std::string & filename) {
@@ -25,7 +31,7 @@ class sched {
                 else
                     runqueues.push_back(NULL);
             }
-            
+
             sched_init_domains(cpu_online_mask);
             
         }
@@ -44,7 +50,161 @@ class sched {
             } 
         }
 
+        void wake_up_new_task(task * p, int cur_cpu) {
+            
+            std::cout << "start waking up task " << p->pid << std::endl;
+            p->state = TASK_RUNNING;
+            int dst_cpu = select_task_rq(p, cur_cpu);
+
+            /* TODO: set hierachy cfs_rq statistic for the task */
+            return;
+        }
+
     private:
+
+        int select_task_rq(task * p, int cur_cpu) {
+            if (p->nr_cpus_allowed > 1)
+                return select_task_rq_fair(p, cur_cpu);
+            return p->cpus_allowed->first();
+        }
+
+        /* TODO: ignore affine for now */
+        int select_task_rq_fair(task * p, int cur_cpu) {
+
+            sched_domain * tmp, *sd = NULL;
+
+            for_each_domain(tmp, cur_cpu) {
+                sd = tmp;
+            }
+
+            return find_idlest_cpu(sd, p, cur_cpu);
+        }
+
+        int find_idlest_cpu(sched_domain * sd, task * p, int cpu) {
+            int new_cpu = cpu;
+            while(sd) {
+                sched_group * group;
+                sched_domain * tmp;
+                int weight;
+
+                group = find_idlest_group(sd, p, cpu);
+
+                std::cout << "idlest group at level " << sd->level << ": " << std::endl;
+                if(group) group->debug_sched_group(0);
+                else sd->groups->debug_sched_group(0);
+
+                if (!group) {
+                    sd = sd->child;
+                    continue;
+                }
+                new_cpu = find_idlest_group_cpu(group, p, cpu);
+
+                if (new_cpu == cpu) {
+                    sd = sd->child;
+                    continue;
+                }
+
+                cpu = new_cpu;
+                weight = sd->span_weight;
+                sd = NULL;
+                for_each_domain(tmp, cpu) {
+                    if (weight <= tmp->span_weight)
+                        break;
+                    sd = tmp;
+                }
+            }
+
+            return new_cpu;
+        }
+
+        /* TODO: consider spare metrics */
+        sched_group * find_idlest_group (sched_domain * sd, task * p, int cur_cpu) {
+            sched_group * idlest = NULL, *group = sd->groups;
+            unsigned long min_runnable_load = ULONG_MAX;
+            unsigned long this_runnable_load = ULONG_MAX;
+            unsigned long min_avg_load = ULONG_MAX, this_avg_load = ULONG_MAX;
+
+            int imbalance_scale = 100 + (sd->imbalance_pct-100)/2;
+            unsigned long imbalance = (NICE_0_LOAD) *
+				(sd->imbalance_pct-100) / 100;
+            do {
+                
+                unsigned long load, avg_load = 0, runnable_load = 0;
+                int local_group = group->span->test_cpu(cur_cpu);
+                int i;
+
+                for_each_cpu(i, group->span) {
+                    runnable_load +=  (runqueues[i])->cfs_runqueue->avg.runnable_load_avg;
+                    avg_load += (runqueues[i])->cfs_runqueue->avg.load_avg;
+
+                }
+
+                avg_load = (avg_load * SCHED_CAPACITY_SCALE) /
+					        group->sgc->capacity;
+                runnable_load = (runnable_load * SCHED_CAPACITY_SCALE) /
+					             group->sgc->capacity;
+
+                if (local_group) {
+                    this_runnable_load = runnable_load;
+                    this_avg_load = avg_load;
+                } else {
+                    /* The runnable load is significantly smaller */
+                    if (min_runnable_load > (runnable_load + imbalance)) {
+                        min_runnable_load = runnable_load;
+                        min_avg_load = avg_load;
+                        idlest = group;
+                    } else if ((runnable_load < (min_runnable_load + imbalance)) &&
+                               (100*min_avg_load > imbalance_scale*avg_load) ) {
+                        /* The runnable loads are close, consider avg_load */
+                        min_avg_load = avg_load;
+                        idlest = group;
+                    }
+                }
+            } while (group = group->next, group != sd->groups);
+
+            if (!idlest)
+                return NULL;
+            if (min_runnable_load > (this_runnable_load + imbalance))
+                return NULL;
+            if ((this_runnable_load < (min_runnable_load + imbalance)) &&
+                (100*this_avg_load < imbalance_scale*min_avg_load))
+                return NULL;
+            return idlest;
+        }
+
+        int find_idlest_group_cpu(sched_group * sg, task *p, int cur_cpu) {
+            unsigned long load, min_load = ULONG_MAX;
+            int least_loaded_cpu = cur_cpu;
+            int shallowest_idle_cpu = -1;
+            int i;
+            if (sg->group_weight == 1) return sg->span->first();
+
+            for_each_cpu(i, sg->span) {
+                if (!p->cpus_allowed->test_cpu(i)) continue;
+                if (idle_cpu(i)) {
+                    shallowest_idle_cpu = i;
+                    break;
+                }
+                load = (runqueues[i])->cfs_runqueue->avg.runnable_load_avg;
+                if ( load < min_load || (load == min_load && i == cur_cpu)) {
+                    min_load = load;
+                    least_loaded_cpu = i;
+                }
+            }
+
+            if (shallowest_idle_cpu != -1) return shallowest_idle_cpu;
+            return least_loaded_cpu;
+
+        }
+
+        int idle_cpu(int cpu) {
+            rq * tmp_rq= runqueues[cpu];
+            // if (tmp_rq->curr != tmp_rq->idle) return 0;
+            if (tmp_rq->nr_running) return 0;
+            return 1;
+
+        }
+        
         int sched_init_domains(cpumask * cpu_map) {
             sched_domain * tmp_sd;
             std::vector<sched_domain *> d;
@@ -164,3 +324,5 @@ class sched {
         }
 
 };
+
+# endif
