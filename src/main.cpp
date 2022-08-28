@@ -3,9 +3,9 @@
 
 int cur_pid = 0;
 
-int start_new_task(sched * global_sched, int cur_cpu, cpumask * cpu_allowed) {
-    task * t = new task(cur_pid, cpu_allowed);
-    int retval = sched_fork() 
+int start_new_task(sched * global_sched, int cur_cpu, cpumask * cpu_allowed, int nice) {
+    task * t = new task(cur_pid, cpu_allowed, nice);
+    global_sched->runqueues[cur_cpu]->post_init_entity_util_avg(t->se);
     global_sched->wake_up_new_task(t, cur_cpu);
 }
 
@@ -18,6 +18,6 @@ int main(int argc, char *argv[])
     # endif
     cpumask * cpu_allowed = new cpumask();
     for(int i = 0; i < NR_CPU; i++) cpu_allowed->set(i);
-    start_new_task(global_sched, 5, cpu_allowed);
+    start_new_task(global_sched, 5, cpu_allowed, 0);
 
 }

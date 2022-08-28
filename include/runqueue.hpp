@@ -3,18 +3,10 @@
 
 # include "sched_domain.hpp"
 # include "task.hpp"
+# include "util.hpp"
 
 extern int cur_pid;
-struct sched_avg {
-    unsigned long   last_update_time;
-    unsigned long   load_sum;
-    unsigned long   runnable_load_sum;
-    unsigned long   util_sum;
-    unsigned long   period_contrib;
-    unsigned long   load_avg;
-    unsigned long   runnable_load_avg;
-    unsigned long   util_avg;
-};
+
 
 class cfs_rq {
     public:
@@ -52,6 +44,10 @@ class cfs_rq {
             min_vruntime = -(1LL << 20);
             cpu = _cpu;
         }
+
+        void update_load_avg(sched_entity * se) {
+            avg.util_avg += se->avg.util_avg;
+        }
 };
 
 class rq {
@@ -73,10 +69,25 @@ class rq {
 
             cfs_runqueue = new cfs_rq(_cpu);
 
-            idle = new task(cur_pid, new cpumask());
-            stop = new task(cur_pid, new cpumask());
+            idle = new task(cur_pid, new cpumask(), 0);
+            stop = new task(cur_pid, new cpumask(), 0);
             curr = idle;
 
+        }
+
+         void post_init_entity_util_avg(sched_entity * se) {
+            long cap = (long)(SCHED_CAPACITY_SCALE - cfs_runqueue->avg.util_avg) / 2;
+            if (cap > 0) {
+                if (cfs_runqueue->avg.util_avg != 0) {
+                    se->avg.util_avg = cfs_runqueue->avg.util_avg * se->weight;
+                    se->avg.util_avg /= (cfs_runqueue->avg.load_avg + 1);
+
+                    if(se->avg.util_avg > cap)
+                        se->avg.util_avg = cap;
+                }
+            }
+            cfs_runqueue->update_load_avg(se);
+            
         }
 };
 

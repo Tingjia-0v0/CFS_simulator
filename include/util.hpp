@@ -30,6 +30,16 @@
 #define TASK_NEW			0x0800
 #define TASK_STATE_MAX			0x1000
 
+#define MAX_NICE	19
+#define MIN_NICE	-20
+#define NICE_WIDTH	(MAX_NICE - MIN_NICE + 1)
+
+#define MAX_USER_RT_PRIO	100
+#define MAX_RT_PRIO		MAX_USER_RT_PRIO
+
+#define DEFAULT_PRIO		(MAX_RT_PRIO + NICE_WIDTH / 2) // 100 + 40/2 = 120
+#define NICE_TO_PRIO(nice)	((nice) + DEFAULT_PRIO)
+
 # define for_each_cpu(cpu, mask)	\
     for (int _first = 1, cpu = mask->first(); \
          (cpu != mask->first() || _first) && cpu != -1; \
@@ -42,5 +52,16 @@
 
 # define for_each_domain(_sd, cpu)   \
     for (_sd = runqueues[cpu]->sd; _sd; _sd = tmp->parent)
+
+struct sched_avg {
+    unsigned long   last_update_time;
+    unsigned long   load_sum;
+    unsigned long   runnable_load_sum;
+    unsigned long   util_sum;
+    unsigned long   period_contrib;
+    unsigned long   load_avg;
+    unsigned long   runnable_load_avg;
+    unsigned long   util_avg;
+};
 
 # endif
