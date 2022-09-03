@@ -53,15 +53,15 @@
 # define for_each_domain(_sd, cpu)   \
     for (_sd = runqueues[cpu]->sd; _sd; _sd = tmp->parent)
 
-struct sched_avg {
-    unsigned long   last_update_time;
-    unsigned long   load_sum;
-    unsigned long   runnable_load_sum;
-    unsigned long   util_sum;
-    unsigned long   period_contrib;
-    unsigned long   load_avg;
-    unsigned long   runnable_load_avg;
-    unsigned long   util_avg;
-};
+#define LOAD_AVG_PERIOD 32
+#define LOAD_AVG_MAX 47742
+
+/*
+ * Optional action to be done while updating the load average
+ */
+#define UPDATE_TG	0x1
+#define SKIP_AGE_LOAD	0x2
+#define DO_ATTACH	0x4
+
 
 # endif

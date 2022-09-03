@@ -55,8 +55,9 @@ class sched {
             std::cout << "start waking up task " << p->pid << std::endl;
             p->state = TASK_RUNNING;
             int dst_cpu = select_task_rq(p, cur_cpu);
-
             /* TODO: set hierachy cfs_rq statistic for the task */
+
+            runqueues[dst_cpu]->post_init_entity_util_avg(p->se);
             return;
         }
 
@@ -134,8 +135,8 @@ class sched {
                 int i;
 
                 for_each_cpu(i, group->span) {
-                    runnable_load +=  (runqueues[i])->cfs_runqueue->avg.runnable_load_avg;
-                    avg_load += (runqueues[i])->cfs_runqueue->avg.load_avg;
+                    runnable_load += (runqueues[i])->cfs_runqueue->avg->runnable_load_avg;
+                    avg_load += (runqueues[i])->cfs_runqueue->avg->load_avg;
 
                 }
 
@@ -185,7 +186,7 @@ class sched {
                     shallowest_idle_cpu = i;
                     break;
                 }
-                load = (runqueues[i])->cfs_runqueue->avg.runnable_load_avg;
+                load = (runqueues[i])->cfs_runqueue->avg->runnable_load_avg;
                 if ( load < min_load || (load == min_load && i == cur_cpu)) {
                     min_load = load;
                     least_loaded_cpu = i;

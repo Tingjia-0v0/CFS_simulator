@@ -7,10 +7,9 @@
 
 extern unsigned long jiffies;
 
-unsigned long _msecs_to_jiffies(const unsigned int m);
-
-unsigned long __msecs_to_jiffies(const unsigned int m);
-
 unsigned long msecs_to_jiffies(unsigned int m);
+
+unsigned long jiffies_to_msecs(unsigned int j);
+
 
 #endif

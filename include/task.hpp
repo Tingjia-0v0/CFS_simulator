@@ -3,6 +3,7 @@
 
 # include "cpumask.hpp"
 # include "util.hpp"
+# include "load.hpp"
 
 /* per entity load tracking */
 
@@ -21,7 +22,7 @@ class sched_entity {
         unsigned long   nr_migrations;
 
         /* TODO: now assume that the task is always runnable */
-        struct sched_avg avg;
+        sched_avg * avg;
 
 
         sched_entity() {
@@ -33,14 +34,26 @@ class sched_entity {
             vruntime = 0;
             prev_sum_exec_runtime = 0;
             nr_migrations = 0;
-            
-            
+
+            avg = new sched_avg();
+        }
+
+        int update_load_avg(unsigned long now, int cpu, int running) {
+            runnable_weight = weight;
+            if (avg->_update_load_sum(now, cpu, !!on_rq, !!on_rq, running)) {
+                avg->_update_load_avg(weight, runnable_weight);
+                return 1;
+            }
+
+            return 0;
         }
 
 };
 
 class task {
     public:
+        sched_entity *      se;
+
         int                 pid;
         /* -1 unrunnable, 0 runnable, >0 stopped: */
         long                state;
@@ -48,13 +61,12 @@ class task {
         /* TODO: assume all prio is static_prio for now */
         int                 static_prio;
 
+        cpumask *           cpus_allowed;
+        int                 nr_cpus_allowed;
+
         /* current CPU */
         unsigned int        cpu;
         int                 on_rq;
-        sched_entity *      se;
-
-        int                 nr_cpus_allowed;
-        cpumask *           cpus_allowed;
 
         const int sched_prio_to_weight[40] = {
             /* -20 */     88761,     71755,     56483,     46273,     36291,
@@ -109,20 +121,24 @@ class task {
     */
 
         task(int & cur_pid, cpumask * _cpus_allowed, int nice) {
+            se = new sched_entity();
+
             pid = cur_pid ++;
             state = TASK_NEW;
             
-            se = new sched_entity();
             static_prio = NICE_TO_PRIO(nice);
+
+            on_rq = 0;
+            cpus_allowed = _cpus_allowed;
+            nr_cpus_allowed = cpumask::cpumask_weight(cpus_allowed);
 
             set_load_weight(false);
             se->runnable_weight = se->weight;
 
-            on_rq = 0;
-            
-            cpus_allowed = _cpus_allowed;
-            nr_cpus_allowed = cpumask::cpumask_weight(cpus_allowed);
+            init_entity_runnable_average();
         }
+
+        
 
     private:
         void set_load_weight(bool update_load) {
@@ -132,6 +148,11 @@ class task {
             } else {
                 se->weight = sched_prio_to_weight[prio];
             }
+        }
+
+        void init_entity_runnable_average() {
+            se->avg->runnable_load_avg = se->avg->load_avg = (se->weight);
+	        se->runnable_weight = se->weight;
         }
 
 };
