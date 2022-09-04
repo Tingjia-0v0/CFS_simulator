@@ -17,6 +17,8 @@ int main(int argc, char *argv[])
     # endif
     cpumask * cpu_allowed = new cpumask();
     for(int i = 0; i < NR_CPU; i++) cpu_allowed->set(i);
+
+    jiffies = 1000;
     start_new_task(global_sched, 5, cpu_allowed, 0);
 
 }

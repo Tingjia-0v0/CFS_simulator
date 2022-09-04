@@ -64,4 +64,15 @@
 #define DO_ATTACH	0x4
 
 
+
+#define ENQUEUE_WAKEUP		0x01
+#define ENQUEUE_RESTORE		0x02
+#define ENQUEUE_MOVE		0x04
+#define ENQUEUE_NOCLOCK		0x08
+
+#define ENQUEUE_HEAD		0x10
+#define ENQUEUE_REPLENISH	0x20
+#define ENQUEUE_MIGRATED	0x40
+
+
 # endif

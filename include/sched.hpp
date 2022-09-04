@@ -61,6 +61,11 @@ class sched {
 
             runqueues[dst_cpu]->cfs_runqueue->avg->debug_load_avg();
             p->se->avg->debug_load_avg();
+
+            std::cout << "activate task " << std::endl;
+            runqueues[dst_cpu]->activate_task(p, ENQUEUE_NOCLOCK);
+            runqueues[dst_cpu]->cfs_runqueue->avg->debug_load_avg();
+            p->se->avg->debug_load_avg();
             return;
         }
 

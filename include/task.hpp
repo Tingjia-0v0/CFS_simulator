@@ -126,7 +126,7 @@ class task {
             pid = cur_pid ++;
             state = TASK_NEW;
             
-            static_prio = NICE_TO_PRIO(nice);
+            static_prio = NICE_TO_PRIO(nice); // nice + 120
 
             on_rq = 0;
             cpus_allowed = _cpus_allowed;
@@ -142,7 +142,7 @@ class task {
 
     private:
         void set_load_weight(bool update_load) {
-            int prio = static_prio - MAX_RT_PRIO;
+            int prio = static_prio - MAX_RT_PRIO; // nice + 20
             if (update_load) {
 
             } else {

@@ -14,6 +14,7 @@ class cfs_rq {
         unsigned long weight;
         unsigned long runnable_weight;
         unsigned int  nr_running;
+        unsigned int  h_nr_running;
 
         unsigned long exec_clock;
         unsigned long min_vruntime;
@@ -49,7 +50,7 @@ class cfs_rq {
             se->avg->runnable_load_sum = se->avg->load_sum;
 
             enqueue_load_avg(se);
-            
+
             avg->util_avg += se->avg->util_avg;
             avg->util_sum += se->avg->util_sum;
         }
@@ -69,11 +70,50 @@ class cfs_rq {
 
         }
 
+        void enqueue_entity(sched_entity * se, int flags) {
+            bool renorm = !(flags & ENQUEUE_WAKEUP) || (flags & ENQUEUE_MIGRATED);
+            bool if_curr = curr == se;
+
+            if (renorm && if_curr)
+                se->vruntime += min_vruntime;
+
+            update_curr();
+
+            if (renorm && !if_curr) 
+                se->vruntime += min_vruntime;
+
+            update_load_avg(se, UPDATE_TG | DO_ATTACH);
+            enqueue_runnable_load_avg(se);
+
+            /*
+             * TODO:
+             * if (flags & ENQUEUE_WAKEUP)
+             *     place_entity(cfs_rq, se, 0);
+             */
+            
+            if (!if_curr)
+                __enqueue_entity(se);
+
+            se->on_rq = 1;
+        }
+
     private:
-        void enqueue_load_avg( struct sched_entity *se)
+        void enqueue_load_avg(sched_entity *se)
         {
             avg->load_avg += se->avg->load_avg;
             avg->load_sum += se->weight * se->avg->load_sum;
+        }
+
+        void enqueue_runnable_load_avg (sched_entity * se) {
+            runnable_weight += se->runnable_weight;
+
+            avg->runnable_load_avg += se->avg->runnable_load_avg;
+            avg->runnable_load_sum += se->runnable_weight * se->avg->runnable_load_sum;
+        }
+
+        void account_entity_enqueue(sched_entity * se) {
+            weight += se->weight;
+            nr_running ++ ;
         }
 
         int update_cfs_rq_load_avg(unsigned long now) {
@@ -92,10 +132,44 @@ class cfs_rq {
             return 0;
         }
 
+        void update_curr() {
+            unsigned long now = jiffies_to_msecs(jiffies);
+            unsigned long delta_exec;
+
+            if (!curr) return;
+
+            delta_exec = now - curr->exec_start;
+
+            if (delta_exec <= 0) return;
+
+            curr->exec_start = 0;
+            curr->sum_exec_runtime += delta_exec;
+            curr->vruntime += (delta_exec * NICE_0_LOAD / curr->weight);             // TODO: check the correctness
+
+            
+
+            /* TODO: update the min_vruntime */
+            // update_min_vruntime(cfs_rq);
+
+
+            // trace_sched_stat_runtime(curtask, delta_exec, curr->vruntime);
+            // cgroup_account_cputime(curtask, delta_exec);
+            // account_group_exec_runtime(curtask, delta_exec);
+
+            // account_cfs_rq_runtime(cfs_rq, delta_exec);
+        }
+
+        /* insert the sched_entity into the rb_tree */
+        void __enqueue_entity(sched_entity * se) {
+            return;
+        }
 };
 
 class rq {
     public:
+        unsigned long   weight;
+        int             overload;
+
         unsigned int    nr_running;
         sched_domain    *sd;
         unsigned long   cpu_capacity;
@@ -144,6 +218,31 @@ class rq {
             cfs_runqueue->attach_entity_load_avg(se);
             
         }
+
+        void activate_task(task * p, int flags) {
+            /* TODO: update nr_uninterruptible if needed */
+            enqueue_task(p, flags);
+        }
+
+        void enqueue_task(task * p, int flags) {
+            cfs_runqueue->enqueue_entity(p->se, flags);
+            /* TODO: check if se is a task 
+             * If so, update the rq's weight
+             */
+            weight += p->se->weight;
+            cfs_runqueue->h_nr_running++;
+            add_nr_running(1);
+        }
+
+        private:
+            void add_nr_running(unsigned int count) {
+                unsigned int prev_nr = nr_running;
+                nr_running = nr_running + count;
+                if(prev_nr < 2 && nr_running >= 2) {
+                    overload = true;
+                }
+            }
+
 };
 
 
