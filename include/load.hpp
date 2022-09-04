@@ -90,6 +90,18 @@ class sched_avg {
             runnable_load_avg   = runnable * runnable_load_sum / divider;
             util_avg            = util_sum / divider;
         }
+
+        void debug_load_avg() {
+            std::cout << "start printing the info of sched_avg: " << std::endl;
+            std::cout << "last_update_time:     " << last_update_time << std::endl;
+            std::cout << "load_sum:             " << load_sum << std::endl;
+            std::cout << "runnable_load_sum:    " << runnable_load_sum << std::endl;
+            std::cout << "util_sum:             " << util_sum << std::endl;
+            std::cout << "period_contrib:       " << period_contrib << std::endl;
+            std::cout << "load_avg:             " << load_avg << std::endl;
+            std::cout << "runnable_load_avg:    " << runnable_load_avg << std::endl;
+            std::cout << "util_avg:             " << util_avg << std::endl;
+        }
     
     private:
         const unsigned long runnable_avg_yN_inv[32] = {

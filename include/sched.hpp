@@ -56,8 +56,11 @@ class sched {
             p->state = TASK_RUNNING;
             int dst_cpu = select_task_rq(p, cur_cpu);
             /* TODO: set hierachy cfs_rq statistic for the task */
-
+            std::cout << "choose dst_cpu: " << dst_cpu << std::endl;
             runqueues[dst_cpu]->post_init_entity_util_avg(p->se);
+
+            runqueues[dst_cpu]->cfs_runqueue->avg->debug_load_avg();
+            p->se->avg->debug_load_avg();
             return;
         }
 
