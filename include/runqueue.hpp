@@ -19,13 +19,13 @@ class cfs_rq {
         unsigned long exec_clock;
         unsigned long min_vruntime;
 
-        // rb_tree *       tasks_timeline;
-
         sched_entity    *curr, *next, *last, *skip;
 
         sched_avg * avg;
 
         int             cpu;
+
+        struct rb_root_cached tasks_timeline;
 
         cfs_rq(int _cpu) {
             // tasks_timeline = new rb_tree();
@@ -38,6 +38,9 @@ class cfs_rq {
             avg = new sched_avg();
             min_vruntime = -(1LL << 20);
             cpu = _cpu;
+
+            tasks_timeline.rb_leftmost = NULL;
+            tasks_timeline.rb_root.rb_node = NULL;
         }
 
         void attach_entity_load_avg(sched_entity * se) {
@@ -75,12 +78,12 @@ class cfs_rq {
             bool if_curr = curr == se;
 
             if (renorm && if_curr)
-                se->vruntime += min_vruntime;
+                se->update_vruntime(se->vruntime + min_vruntime);
 
             update_curr();
 
             if (renorm && !if_curr) 
-                se->vruntime += min_vruntime;
+                se->update_vruntime(se->vruntime + min_vruntime);
 
             update_load_avg(se, UPDATE_TG | DO_ATTACH);
             enqueue_runnable_load_avg(se);
@@ -144,23 +147,36 @@ class cfs_rq {
 
             curr->exec_start = 0;
             curr->sum_exec_runtime += delta_exec;
-            curr->vruntime += (delta_exec * NICE_0_LOAD / curr->weight);             // TODO: check the correctness
-
-            
+            curr->update_vruntime(curr->vruntime +  (delta_exec * NICE_0_LOAD / curr->weight));  // TODO: check the correctness
 
             /* TODO: update the min_vruntime */
             // update_min_vruntime(cfs_rq);
 
-
-            // trace_sched_stat_runtime(curtask, delta_exec, curr->vruntime);
+            // trace_sched_stat_runtime(curtask, delta_exec, curr->0);
             // cgroup_account_cputime(curtask, delta_exec);
             // account_group_exec_runtime(curtask, delta_exec);
-
             // account_cfs_rq_runtime(cfs_rq, delta_exec);
         }
 
         /* insert the sched_entity into the rb_tree */
         void __enqueue_entity(sched_entity * se) {
+            struct rb_node ** link = &tasks_timeline.rb_root.rb_node;
+            struct rb_node * parent = NULL;
+            bool leftmost = true;
+
+            while(*link) {
+                parent = *link;
+                if (se->vruntime < parent->vruntime)
+                    link = &parent->rb_left;
+                else {
+                    link = &parent->rb_right;
+                    leftmost = false;
+                }
+            }
+            rb_link_node(&se->run_node, parent, link);
+            rb_insert_color_cached(&se->run_node,
+                                   &tasks_timeline, 
+                                   leftmost);
             return;
         }
 };

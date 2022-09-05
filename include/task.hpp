@@ -4,6 +4,7 @@
 # include "cpumask.hpp"
 # include "util.hpp"
 # include "load.hpp"
+# include "rb_tree.hpp"
 
 /* per entity load tracking */
 
@@ -11,7 +12,7 @@ class sched_entity {
     public:
         unsigned long   weight;
         unsigned long   runnable_weight;
-        // rb_node *       run_node;
+        struct rb_node  run_node;
         unsigned long   on_rq;
 
         unsigned long   exec_start;
@@ -46,6 +47,11 @@ class sched_entity {
             }
 
             return 0;
+        }
+
+        void update_vruntime(unsigned long new_vruntime){
+            vruntime = new_vruntime;
+            run_node.vruntime = new_vruntime;
         }
 
 };

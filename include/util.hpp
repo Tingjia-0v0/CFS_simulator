@@ -74,5 +74,7 @@
 #define ENQUEUE_REPLENISH	0x20
 #define ENQUEUE_MIGRATED	0x40
 
+#define	RB_RED		0
+#define	RB_BLACK	1
 
 # endif
