@@ -33,10 +33,10 @@ class cfs_rq {
             runnable_weight = 0;
             nr_running = 0;
             exec_clock = 0;
-            min_vruntime = 0;
+
             curr = next = last = skip = NULL;
             avg = new sched_avg();
-            min_vruntime = -(1LL << 20);
+            min_vruntime = 0;
             cpu = _cpu;
 
             tasks_timeline.rb_leftmost = NULL;
@@ -76,7 +76,6 @@ class cfs_rq {
         void enqueue_entity(sched_entity * se, int flags) {
             bool renorm = !(flags & ENQUEUE_WAKEUP) || (flags & ENQUEUE_MIGRATED);
             bool if_curr = curr == se;
-
             if (renorm && if_curr)
                 se->update_vruntime(se->vruntime + min_vruntime);
 
@@ -98,6 +97,8 @@ class cfs_rq {
                 __enqueue_entity(se);
 
             se->on_rq = 1;
+
+            debug_tasktimeline(&tasks_timeline);
         }
 
     private:
@@ -203,8 +204,8 @@ class rq {
 
             cfs_runqueue = new cfs_rq(_cpu);
 
-            idle = new task(cur_pid, new cpumask(), 0);
-            stop = new task(cur_pid, new cpumask(), 0);
+            idle = new task(cur_pid, new cpumask(), 0, 1);
+            stop = new task(cur_pid, new cpumask(), 0, 1);
             curr = idle;
 
         }

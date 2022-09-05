@@ -37,6 +37,11 @@ class sched_entity {
             nr_migrations = 0;
 
             avg = new sched_avg();
+
+            run_node.vruntime = 0;
+            run_node.color = RB_RED;
+            run_node.rb_left = run_node.rb_right = run_node.rb_parent = NULL;
+            run_node.se = this;
         }
 
         int update_load_avg(unsigned long now, int cpu, int running) {
@@ -126,7 +131,7 @@ class task {
         * ...
     */
 
-        task(int & cur_pid, cpumask * _cpus_allowed, int nice) {
+        task(int & cur_pid, cpumask * _cpus_allowed, int nice, int nr_thread) {
             se = new sched_entity();
 
             pid = cur_pid ++;
@@ -138,7 +143,7 @@ class task {
             cpus_allowed = _cpus_allowed;
             nr_cpus_allowed = cpumask::cpumask_weight(cpus_allowed);
 
-            set_load_weight(false);
+            set_load_weight(false, nr_thread);
             se->runnable_weight = se->weight;
 
             init_entity_runnable_average();
@@ -147,12 +152,12 @@ class task {
         
 
     private:
-        void set_load_weight(bool update_load) {
+        void set_load_weight(bool update_load, int nr_thread) {
             int prio = static_prio - MAX_RT_PRIO; // nice + 20
             if (update_load) {
 
             } else {
-                se->weight = sched_prio_to_weight[prio];
+                se->weight = sched_prio_to_weight[prio] / nr_thread;
             }
         }
 

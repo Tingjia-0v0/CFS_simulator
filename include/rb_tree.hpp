@@ -3,13 +3,16 @@
 
 #include <iostream>
 #include "util.hpp"
+#include "task.hpp"
 
+class sched_entity;
 struct rb_node {
     short color;
     struct rb_node *rb_parent;
 	struct rb_node *rb_right;
 	struct rb_node *rb_left;
     unsigned long  vruntime;
+	sched_entity * se;
 };
 
 struct rb_root {
@@ -225,5 +228,43 @@ void rb_insert_color_cached(struct rb_node *node,
 		    &root->rb_leftmost, dummy_rotate);
 }
 
+struct rb_node *rb_next(const struct rb_node *node)
+{
+	struct rb_node *parent;
 
+	if (node == NULL)
+		return NULL;
+
+	/*
+	 * If we have a right-hand child, go down and then left as far
+	 * as we can.
+	 */
+	if (node->rb_right) {
+		node = node->rb_right;
+		while (node->rb_left)
+			node=node->rb_left;
+		return (struct rb_node *)node;
+	}
+
+	/*
+	 * No right-hand children. Everything down and left is smaller than us,
+	 * so any 'next' node must be in the general direction of our parent.
+	 * Go up the tree; any time the ancestor is a right-hand child of its
+	 * parent, keep going up. First time it's a left-hand child of its
+	 * parent, said parent is our 'next' node.
+	 */
+	while ((parent = node->rb_parent) && node == parent->rb_right)
+		node = parent;
+
+	return parent;
+}
+
+void debug_tasktimeline(struct rb_root_cached * tree) {
+	std::cout << "start printing the task timeline: " << std::endl;
+	struct rb_node * node = tree->rb_leftmost;
+	for(node = tree->rb_leftmost; node != NULL; node = rb_next(node)) {
+		std::cout << node->vruntime << " ";
+	}
+	std::cout << std::endl;
+}
 #endif

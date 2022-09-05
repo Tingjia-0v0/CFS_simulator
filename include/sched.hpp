@@ -50,22 +50,37 @@ class sched {
             } 
         }
 
+        void debug_rqlen() {
+            std::cout << "The Queue Length of Each Runqueue" << std::endl;
+            int i;
+            int j;
+            cpumask * covered = new cpumask();
+            for_each_cpu(i, cpu_online_mask) {
+                if (covered->test_cpu(i)) continue;
+                covered->set(i);
+                std::cout << runqueues[i]->nr_running << " ";
+                for_each_cpu(j, cpu_topology[i]->core_sibling) {
+                    std::cout << runqueues[j]->nr_running << " ";
+                    covered->set(j);
+                }
+                
+                std::cout << std::endl;
+            }
+        }
+
         void wake_up_new_task(task * p, int cur_cpu) {
             
-            std::cout << "start waking up task " << p->pid << std::endl;
+            std::cout << ">>> start waking up task " << p->pid << std::endl;
             p->state = TASK_RUNNING;
             int dst_cpu = select_task_rq(p, cur_cpu);
             /* TODO: set hierachy cfs_rq statistic for the task */
-            std::cout << "choose dst_cpu: " << dst_cpu << std::endl;
+            std::cout << "    choose dst_cpu: " << dst_cpu << std::endl;
             runqueues[dst_cpu]->post_init_entity_util_avg(p->se);
 
-            runqueues[dst_cpu]->cfs_runqueue->avg->debug_load_avg();
-            p->se->avg->debug_load_avg();
-
-            std::cout << "activate task " << std::endl;
             runqueues[dst_cpu]->activate_task(p, ENQUEUE_NOCLOCK);
-            runqueues[dst_cpu]->cfs_runqueue->avg->debug_load_avg();
-            p->se->avg->debug_load_avg();
+
+            // runqueues[dst_cpu]->cfs_runqueue->avg->debug_load_avg();
+            // p->se->avg->debug_load_avg();
             return;
         }
 
