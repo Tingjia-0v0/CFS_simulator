@@ -21,8 +21,10 @@ int main(int argc, char *argv[])
     jiffies = 1000;
     start_new_task(global_sched, 5, cpu_allowed, 0, 1);
     start_new_task(global_sched, 5, cpu_allowed, 0, 1);
-    for(int i = 0; i < 64; i++)
+    for(int i = 0; i < 64; i++) {
+        jiffies += msecs_to_jiffies(2);
         start_new_task(global_sched, 5, cpu_allowed, 0, 64);
+    }
 
     global_sched->debug_rqlen();
 

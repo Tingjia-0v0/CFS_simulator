@@ -10,7 +10,7 @@ class sched_avg {
          * For se, load_sum = (runnable time length among LOAD_AVG_MAX)
          * 
          * util_avg = running % * 1024
-         * util_sum = (runnable time length among LOAD_AVG_MAX) * 1024
+         * util_sum = (running time length among LOAD_AVG_MAX) * 1024
          */
         unsigned long   last_update_time;
         unsigned long   load_sum;
@@ -37,6 +37,10 @@ class sched_avg {
             delta += period_contrib;
             periods = delta / 1024;
 
+            std::cout << "period: " << periods << std::endl;
+            std::cout << "load:   " << runnable << std::endl;
+            std::cout << "load_sum: " << load_sum << std::endl;
+
             if (periods) {
                 load_sum = decay_load(load_sum, periods);                   // load_sum = old_load_sum * y^period
                 runnable_load_sum =
@@ -50,13 +54,16 @@ class sched_avg {
 
             period_contrib = delta;
 
-            contrib = contrib / 1024;                                       // Change from us to ms
+            // contrib = contrib / 1024;                                       // Change from us to ms
             if (load)
                 load_sum += load * contrib;
             if (runnable)
                 runnable_load_sum += runnable * contrib;
             if (running)
                 util_sum += contrib * SCHED_CAPACITY_SCALE;
+
+            std::cout << "load_sum: " << load_sum << std::endl;
+            std::cout << "contrib:  " << contrib << std::endl;
 
             return periods;
         }
@@ -85,10 +92,13 @@ class sched_avg {
              * LOAD_AVG_MAX = 1024(1 + y + y^2 + ... + y^n)
              */
             unsigned long divider = LOAD_AVG_MAX - 1024 + period_contrib;
+            std::cout << "previous load avg: " << load_avg << std::endl;
 
             load_avg            = load * load_sum / divider;                // runnable% * load
             runnable_load_avg   = runnable * runnable_load_sum / divider;
             util_avg            = util_sum / divider;
+
+            std::cout << "new load avg:      " << load_avg << std::endl;
         }
 
         void debug_load_avg() {

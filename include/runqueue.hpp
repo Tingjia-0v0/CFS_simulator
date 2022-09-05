@@ -62,7 +62,7 @@ class cfs_rq {
            TODO: now it only updates the cfs_rq's load_avg */
         void update_load_avg(sched_entity * se, int flags) {
 
-            unsigned long now = jiffies_to_msecs(jiffies);
+            unsigned long now = jiffies_to_msecs(jiffies) * 1000000;
             if (se->avg->last_update_time && !(flags & SKIP_AGE_LOAD))
                 se->update_load_avg(now, cpu, curr == se);
             
@@ -97,8 +97,7 @@ class cfs_rq {
                 __enqueue_entity(se);
 
             se->on_rq = 1;
-
-            debug_tasktimeline(&tasks_timeline);
+            // debug_tasktimeline(&tasks_timeline);
         }
 
     private:
@@ -109,6 +108,7 @@ class cfs_rq {
         }
 
         void enqueue_runnable_load_avg (sched_entity * se) {
+            weight += se->weight;
             runnable_weight += se->runnable_weight;
 
             avg->runnable_load_avg += se->avg->runnable_load_avg;
@@ -123,6 +123,7 @@ class cfs_rq {
         int update_cfs_rq_load_avg(unsigned long now) {
             int decayed = 0;
             decayed |= __update_load_avg_cfs_rq(now, cpu);
+            avg->debug_load_avg();
             return decayed;
         }
 
