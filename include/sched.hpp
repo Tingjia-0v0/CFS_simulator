@@ -59,16 +59,12 @@ class sched {
                 if (covered->test_cpu(i)) continue;
                 covered->set(i);
                 for_each_cpu(j, cpu_topology[i]->core_sibling) {
-                    std::cout << runqueues[j]->nr_running << " ";
+                    std::cout << runqueues[j]->nr_running << ":" << runqueues[j]->cfs_runqueue->avg->runnable_load_avg << "\t";
                     covered->set(j);
                 }
                 
                 std::cout << std::endl;
             }
-        }
-
-        void debug_load() {
-
         }
 
         void wake_up_new_task(task * p, int cur_cpu) {

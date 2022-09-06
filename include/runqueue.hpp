@@ -97,7 +97,7 @@ class cfs_rq {
                 __enqueue_entity(se);
 
             se->on_rq = 1;
-            // debug_tasktimeline(&tasks_timeline);
+            debug_tasktimeline(&tasks_timeline);
         }
 
     private:
@@ -123,7 +123,7 @@ class cfs_rq {
         int update_cfs_rq_load_avg(unsigned long now) {
             int decayed = 0;
             decayed |= __update_load_avg_cfs_rq(now, cpu);
-            avg->debug_load_avg();
+            // avg->debug_load_avg();
             return decayed;
         }
 
