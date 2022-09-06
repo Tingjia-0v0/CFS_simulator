@@ -92,13 +92,10 @@ class sched_avg {
              * LOAD_AVG_MAX = 1024(1 + y + y^2 + ... + y^n)
              */
             unsigned long divider = LOAD_AVG_MAX - 1024 + period_contrib;
-            std::cout << "previous load avg: " << load_avg << std::endl;
 
             load_avg            = (load * load_sum + (load * load_sum) % divider) / divider;                // runnable% * load
             runnable_load_avg   = (runnable * runnable_load_sum + (runnable * runnable_load_sum) % divider) / divider;
             util_avg            = util_sum / divider;
-
-            std::cout << "new load avg:      " << load_avg << std::endl;
         }
 
         void debug_load_avg() {
