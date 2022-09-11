@@ -12,6 +12,7 @@ struct rb_node {
 	struct rb_node *rb_right;
 	struct rb_node *rb_left;
     unsigned long  vruntime;
+	int pid;
 	sched_entity * se;
 };
 
@@ -23,7 +24,23 @@ struct rb_root_cached {
 	struct rb_root rb_root;
 	struct rb_node *rb_leftmost;
 };
+
+struct rb_augment_callbacks {
+	void (*propagate)(struct rb_node *node, struct rb_node *stop);
+	void (*copy)(struct rb_node *old, struct rb_node *_new);
+	void (*rotate)(struct rb_node *old, struct rb_node *_new);
+};
+
+static inline void dummy_propagate(struct rb_node *node, struct rb_node *stop) {}
+static inline void dummy_copy(struct rb_node *old, struct rb_node *_new) {}
 static inline void dummy_rotate(struct rb_node *old, struct rb_node *_new) {}
+
+static const struct rb_augment_callbacks dummy_callbacks = {
+	.propagate = dummy_propagate,
+	.copy = dummy_copy,
+	.rotate = dummy_rotate
+};
+
 static inline void
 __rb_change_child(struct rb_node *old, struct rb_node *_new,
 		  struct rb_node *parent, struct rb_root *root)
@@ -259,12 +276,343 @@ struct rb_node *rb_next(const struct rb_node *node)
 	return parent;
 }
 
+
+struct rb_node *
+__rb_erase_augmented(struct rb_node *node, struct rb_root *root,
+		     struct rb_node **leftmost,
+		     const struct rb_augment_callbacks *augment)
+{
+	struct rb_node *child = node->rb_right;
+	struct rb_node *tmp = node->rb_left;
+	struct rb_node *parent, *rebalance;
+	struct rb_node * pc_parent;
+	short pc_color;
+
+	if (leftmost && node == *leftmost)
+		*leftmost = rb_next(node);
+
+	if (!tmp) {
+		/*
+		 * Case 1: node to erase has no more than 1 child (easy!)
+		 *
+		 * Note that if there is one child it must be red due to 5)
+		 * and node must be black due to 4). We adjust colors locally
+		 * so as to bypass __rb_erase_color() later on.
+		 */
+		pc_parent = node->rb_left;
+		pc_color = node->color;
+
+		parent = pc_parent;
+
+		__rb_change_child(node, child, parent, root);
+		if (child) {
+			child->rb_parent = pc_parent;
+			child->color = pc_color;
+			rebalance = NULL;
+		} else
+			rebalance = (pc_color == RB_BLACK) ? parent : NULL;
+		tmp = parent;
+	} else if (!child) {
+		/* Still case 1, but this time the child is node->rb_left */
+		tmp->rb_parent = pc_parent = node->rb_parent;
+		tmp->color = pc_color = node->color;
+		parent = pc_parent;
+		__rb_change_child(node, tmp, parent, root);
+		rebalance = NULL;
+		tmp = parent;
+	} else {
+		struct rb_node *successor = child, *child2;
+
+		tmp = child->rb_left;
+		if (!tmp) {
+			/*
+			 * Case 2: node's successor is its right child
+			 *
+			 *    (n)          (s)
+			 *    / \          / \
+			 *  (x) (s)  ->  (x) (c)
+			 *        \
+			 *        (c)
+			 */
+			parent = successor;
+			child2 = successor->rb_right;
+
+			augment->copy(node, successor);
+		} else {
+			/*
+			 * Case 3: node's successor is leftmost under
+			 * node's right child subtree
+			 *
+			 *    (n)          (s)
+			 *    / \          / \
+			 *  (x) (y)  ->  (x) (y)
+			 *      /            /
+			 *    (p)          (p)
+			 *    /            /
+			 *  (s)          (c)
+			 *    \
+			 *    (c)
+			 */
+			do {
+				parent = successor;
+				successor = tmp;
+				tmp = tmp->rb_left;
+			} while (tmp);
+			child2 = successor->rb_right;
+			parent->rb_left = child2;
+			successor->rb_right = child;
+			child->rb_parent = successor;
+
+			augment->copy(node, successor);
+			augment->propagate(parent, successor);
+		}
+
+		tmp = node->rb_left;
+		successor->rb_left = tmp;
+		tmp->rb_parent = successor;
+
+		pc_parent = node->rb_parent;
+		pc_color = node->color;
+		tmp = pc_parent;
+		__rb_change_child(node, successor, tmp, root);
+
+		if (child2) {
+			successor->rb_parent = pc_parent;
+			successor->color = pc_color;
+			child2->rb_parent = parent;
+			child2->color = RB_BLACK;
+			rebalance = NULL;
+		} else {
+			struct rb_node * pc_parent2 = successor->rb_parent;
+			short pc_color2 = successor->color;
+
+			successor->rb_parent = pc_parent;
+			successor->color = pc_color;
+			rebalance = pc_color2 ? parent : NULL;
+		}
+		tmp = successor;
+	}
+
+	augment->propagate(tmp, NULL);
+	return rebalance;
+}
+
+void
+____rb_erase_color(struct rb_node *parent, struct rb_root *root,
+	void (*augment_rotate)(struct rb_node *old, struct rb_node *_new))
+{
+	struct rb_node *node = NULL, *sibling, *tmp1, *tmp2;
+
+	while (true) {
+		/*
+		 * Loop invariants:
+		 * - node is black (or NULL on first iteration)
+		 * - node is not the root (parent is not NULL)
+		 * - All leaf paths going through parent and node have a
+		 *   black node count that is 1 lower than other leaf paths.
+		 */
+		sibling = parent->rb_right;
+		if (node != sibling) {	/* node == parent->rb_left */
+			if (sibling->color == RB_RED) {
+				/*
+				 * Case 1 - left rotate at parent
+				 *
+				 *     P               S
+				 *    / \             / \
+				 *   N   s    -->    p   Sr
+				 *      / \         / \
+				 *     Sl  Sr      N   Sl
+				 */
+				tmp1 = sibling->rb_left;
+				parent->rb_right = tmp1;
+				sibling->rb_left = parent;
+				tmp1->rb_parent = parent;
+				tmp1->color = RB_BLACK;
+
+				__rb_rotate_set_parents(parent, sibling, root,
+							RB_RED);
+				augment_rotate(parent, sibling);
+				sibling = tmp1;
+			}
+			tmp1 = sibling->rb_right;
+			if (!tmp1 || tmp1->color == RB_BLACK) {
+				tmp2 = sibling->rb_left;
+				if (!tmp2 || tmp2->color == RB_BLACK) {
+					/*
+					 * Case 2 - sibling color flip
+					 * (p could be either color here)
+					 *
+					 *    (p)           (p)
+					 *    / \           / \
+					 *   N   S    -->  N   s
+					 *      / \           / \
+					 *     Sl  Sr        Sl  Sr
+					 *
+					 * This leaves us violating 5) which
+					 * can be fixed by flipping p to black
+					 * if it was red, or by recursing at p.
+					 * p is red when coming from Case 1.
+					 */
+					sibling->rb_parent = parent;
+					sibling->color = RB_RED;
+
+					if (parent->color == RB_RED)
+						parent->color = RB_BLACK;
+					else {
+						node = parent;
+						parent = node->rb_parent;
+						if (parent)
+							continue;
+					}
+					break;
+				}
+				/*
+				 * Case 3 - right rotate at sibling
+				 * (p could be either color here)
+				 *
+				 *   (p)           (p)
+				 *   / \           / \
+				 *  N   S    -->  N   sl
+				 *     / \             \
+				 *    sl  Sr            S
+				 *                       \
+				 *                        Sr
+				 *
+				 * Note: p might be red, and then both
+				 * p and sl are red after rotation(which
+				 * breaks property 4). This is fixed in
+				 * Case 4 (in __rb_rotate_set_parents()
+				 *         which set sl the color of p
+				 *         and set p RB_BLACK)
+				 *
+				 *   (p)            (sl)
+				 *   / \            /  \
+				 *  N   sl   -->   P    S
+				 *       \        /      \
+				 *        S      N        Sr
+				 *         \
+				 *          Sr
+				 */
+				tmp1 = tmp2->rb_right;
+				sibling->rb_left = tmp1;
+				tmp2->rb_right = sibling;
+				parent->rb_right = tmp2;
+
+				if (tmp1) {
+					tmp1->rb_parent = sibling;
+					tmp1->color = RB_BLACK;
+				}
+				augment_rotate(sibling, tmp2);
+				tmp1 = sibling;
+				sibling = tmp2;
+			}
+			/*
+			 * Case 4 - left rotate at parent + color flips
+			 * (p and sl could be either color here.
+			 *  After rotation, p becomes black, s acquires
+			 *  p's color, and sl keeps its color)
+			 *
+			 *      (p)             (s)
+			 *      / \             / \
+			 *     N   S     -->   P   Sr
+			 *        / \         / \
+			 *      (sl) sr      N  (sl)
+			 */
+			tmp2 = sibling->rb_left;
+			parent->rb_right = tmp2;
+			sibling->rb_left = parent;
+			tmp1->rb_parent = sibling;
+			tmp1->color = RB_BLACK;
+			
+			if (tmp2) {
+				tmp2->rb_parent = parent;
+			}
+			__rb_rotate_set_parents(parent, sibling, root,
+						RB_BLACK);
+			augment_rotate(parent, sibling);
+			break;
+		} else {
+			sibling = parent->rb_left;
+			if (sibling->color == RB_RED) {
+				/* Case 1 - right rotate at parent */
+				tmp1 = sibling->rb_right;
+				parent->rb_left = tmp1;
+				sibling->rb_right = parent;
+				tmp1->rb_parent = parent;
+				tmp1->color = RB_BLACK;
+				__rb_rotate_set_parents(parent, sibling, root,
+							RB_RED);
+				augment_rotate(parent, sibling);
+				sibling = tmp1;
+			}
+			tmp1 = sibling->rb_left;
+			if (!tmp1 || (tmp1->color == RB_BLACK)) {
+				tmp2 = sibling->rb_right;
+				if (!tmp2 || (tmp2->color == RB_BLACK)) {
+					/* Case 2 - sibling color flip */
+					sibling->rb_parent = parent;
+					sibling->color = RB_RED;
+
+					if (parent->color = RB_RED)
+						parent->color = RB_BLACK;
+					else {
+						node = parent;
+						parent = node->rb_parent;
+						if (parent)
+							continue;
+					}
+					break;
+				}
+				/* Case 3 - left rotate at sibling */
+				tmp1 = tmp2->rb_left;
+				sibling->rb_right = tmp1;
+				tmp2->rb_left = sibling;
+				parent->rb_left = tmp2;
+
+				if (tmp1) {
+					tmp1->rb_parent = sibling;
+					tmp1->color = RB_BLACK;
+				}
+
+				augment_rotate(sibling, tmp2);
+				tmp1 = sibling;
+				sibling = tmp2;
+			}
+			/* Case 4 - right rotate at parent + color flips */
+			tmp2 = sibling->rb_right;
+			parent->rb_left = tmp2;
+			sibling->rb_right = parent;
+			tmp1->rb_parent = sibling;
+			tmp1->color = RB_BLACK;
+			if (tmp2) {
+				tmp2->rb_parent = parent;
+			}
+			__rb_rotate_set_parents(parent, sibling, root,
+						RB_BLACK);
+			augment_rotate(parent, sibling);
+			break;
+		}
+	}
+}
+
+void rb_erase_cached(struct rb_node *node, struct rb_root_cached *root)
+{
+	struct rb_node *rebalance;
+	rebalance = __rb_erase_augmented(node, &root->rb_root,
+					 &root->rb_leftmost, &dummy_callbacks);
+	if (rebalance)
+		____rb_erase_color(rebalance, &root->rb_root, dummy_rotate);
+}
+
+#define rb_first_cached(root) (root)->rb_leftmost
+
 void debug_tasktimeline(struct rb_root_cached * tree) {
-	std::cout << "start printing the task timeline: " << std::endl;
+	std::cout << "    start printing the task timeline: ";
 	struct rb_node * node = tree->rb_leftmost;
 	for(node = tree->rb_leftmost; node != NULL; node = rb_next(node)) {
-		std::cout << node->vruntime << " ";
+		std::cout << node->pid << ":" << node->vruntime << " ";
 	}
 	std::cout << std::endl;
 }
+
 #endif

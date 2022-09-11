@@ -37,9 +37,9 @@ class sched_avg {
             delta += period_contrib;
             periods = delta / 1024;
 
-            std::cout << "period: " << periods << std::endl;
-            std::cout << "load:   " << runnable << std::endl;
-            std::cout << "load_sum: " << load_sum << std::endl;
+            // std::cout << "period: " << periods << std::endl;
+            // std::cout << "load:   " << runnable << std::endl;
+            // std::cout << "load_sum: " << load_sum << std::endl;
 
             if (periods) {
                 load_sum = decay_load(load_sum, periods);                   // load_sum = old_load_sum * y^period
@@ -62,8 +62,8 @@ class sched_avg {
             if (running)
                 util_sum += contrib * SCHED_CAPACITY_SCALE;
 
-            std::cout << "load_sum: " << load_sum << std::endl;
-            std::cout << "contrib:  " << contrib << std::endl;
+            // std::cout << "load_sum: " << load_sum << std::endl;
+            // std::cout << "contrib:  " << contrib << std::endl;
 
             return periods;
         }

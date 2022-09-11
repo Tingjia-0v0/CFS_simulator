@@ -12,9 +12,9 @@ int main(int argc, char *argv[])
 {
     sched * global_sched = new sched("/users/Tingjia/CFS_simulator/arch/lscpu_parsed.json");
 
-    # ifdef DEBUG
-        global_sched->debug_sched(0);
-    # endif
+    // # ifdef DEBUG
+    //     global_sched->debug_sched(0);
+    // # endif
     cpumask * cpu_allowed = new cpumask();
     for(int i = 0; i < NR_CPU; i++) cpu_allowed->set(i);
 
@@ -26,6 +26,10 @@ int main(int argc, char *argv[])
         start_new_task(global_sched, 5, cpu_allowed, 0, 64);
     }
 
+    global_sched->debug_rqlen();
+
+    jiffies += msecs_to_jiffies(20);
+    global_sched->resched_all();
     global_sched->debug_rqlen();
 
 }

@@ -36,6 +36,52 @@ class sched {
             
         }
 
+        void wake_up_new_task(task * p, int cur_cpu) {
+            
+            std::cout << ">>> start waking up task " << p->pid << std::endl;
+
+            
+            p->state = TASK_RUNNING;
+            int dst_cpu = select_task_rq(p, cur_cpu);
+
+            runqueues[dst_cpu]->preempt_disable();
+
+            std::cout << "    choose dst_cpu: " << dst_cpu << std::endl;
+            runqueues[dst_cpu]->post_init_entity_util_avg(p->se);
+
+            runqueues[dst_cpu]->activate_task(p, ENQUEUE_NOCLOCK);
+
+            std::cout << "    runnable_weight: " << runqueues[dst_cpu]->cfs_runqueue->runnable_weight << std::endl;
+            std::cout << "    weight         : " << runqueues[dst_cpu]->cfs_runqueue->weight << std::endl;
+
+            p->on_rq = 1;
+
+            runqueues[dst_cpu]->check_preempt_curr(p, WF_FORK);
+
+
+            // runqueues[dst_cpu]->cfs_runqueue->avg->debug_load_avg();
+            // p->se->avg->debug_load_avg();
+            runqueues[dst_cpu]->preempt_enable();
+
+            std::cout << "    curr task: " << runqueues[dst_cpu]->curr->pid << " " 
+                      << runqueues[dst_cpu]->cfs_runqueue->curr->container_task->pid << std::endl;
+            return;
+        }
+
+        void resched_all() {
+            int i;
+            for_each_cpu(i, cpu_online_mask) {
+                std::cout << "cpu: " << i << std::endl;
+                runqueues[i]->schedule();
+                std::cout << "    curr task: " << runqueues[i]->curr->pid << " ";
+                if (runqueues[i]->cfs_runqueue->curr != NULL)
+                    std::cout << runqueues[i]->cfs_runqueue->curr->container_task->pid << std::endl;
+                else
+                    std::cout << "empty cfs_runqueue" << std::endl;
+            }
+
+        }
+
         void debug_sched(int _level) {
             std::cout << "Sched max level: " << sched_domain_level_max << std::endl;
             debug_cputopo();
@@ -65,24 +111,6 @@ class sched {
                 
                 std::cout << std::endl;
             }
-        }
-
-        void wake_up_new_task(task * p, int cur_cpu) {
-            
-            std::cout << ">>> start waking up task " << p->pid << std::endl;
-            p->state = TASK_RUNNING;
-            int dst_cpu = select_task_rq(p, cur_cpu);
-
-            std::cout << "    choose dst_cpu: " << dst_cpu << std::endl;
-            runqueues[dst_cpu]->post_init_entity_util_avg(p->se);
-
-            runqueues[dst_cpu]->activate_task(p, ENQUEUE_NOCLOCK);
-
-            std::cout << ">>> runnable_weight: " << runqueues[dst_cpu]->cfs_runqueue->runnable_weight << std::endl;
-            std::cout << ">>> weight         : " << runqueues[dst_cpu]->cfs_runqueue->weight << std::endl;
-            // runqueues[dst_cpu]->cfs_runqueue->avg->debug_load_avg();
-            // p->se->avg->debug_load_avg();
-            return;
         }
 
     private:

@@ -8,6 +8,7 @@
 
 /* per entity load tracking */
 
+class task;
 class sched_entity {
     public:
         unsigned long   weight;
@@ -25,8 +26,10 @@ class sched_entity {
         /* TODO: now assume that the task is always runnable */
         sched_avg * avg;
 
+        task * container_task;
 
-        sched_entity() {
+
+        sched_entity(int pid) {
             weight = 0;
             runnable_weight = 0;
             on_rq = 0;
@@ -42,6 +45,7 @@ class sched_entity {
             run_node.color = RB_RED;
             run_node.rb_left = run_node.rb_right = run_node.rb_parent = NULL;
             run_node.se = this;
+            run_node.pid = pid;
         }
 
         int update_load_avg(unsigned long now, int cpu, int running) {
@@ -58,6 +62,27 @@ class sched_entity {
             vruntime = new_vruntime;
             run_node.vruntime = new_vruntime;
         }
+
+        int wake_up_preempt_entity(sched_entity * se) {
+            std::cout << "    current task vruntime: " << vruntime << ", "
+                      << "new task vruntime" << se->vruntime << std::endl;
+            long gran, vdiff = vruntime - se->vruntime;
+
+	        if (vdiff <= 0)
+		        return -1;
+
+	        gran = wakeup_gran(se);
+	        if (vdiff > gran)
+		        return 1;
+
+	        return 0;
+        }
+
+        long wakeup_gran(sched_entity * se) {
+            unsigned long gran = sysctl_sched_wakeup_granularity;
+            return gran;
+        }
+
 
 };
 
@@ -78,6 +103,9 @@ class task {
         /* current CPU */
         unsigned int        cpu;
         int                 on_rq;
+
+        int                 RESCHED_FLAG;
+        int                 SIGPENDING_FLAG;
 
         const int sched_prio_to_weight[40] = {
             /* -20 */     88761,     71755,     56483,     46273,     36291,
@@ -132,9 +160,12 @@ class task {
     */
 
         task(int & cur_pid, cpumask * _cpus_allowed, int nice, int nr_thread) {
-            se = new sched_entity();
-
+           
             pid = cur_pid ++;
+
+            se = new sched_entity(pid);
+
+            se->container_task = this;
             state = TASK_NEW;
             
             static_prio = NICE_TO_PRIO(nice); // nice + 120
@@ -146,7 +177,33 @@ class task {
             set_load_weight(false, nr_thread);
             se->runnable_weight = se->weight;
 
+            RESCHED_FLAG = 0;
+            SIGPENDING_FLAG = 0;
+
             init_entity_runnable_average();
+        }
+
+        int test_tsk_need_resched() {
+            return RESCHED_FLAG == 1;
+        }
+        void set_tsk_need_resched() {
+            RESCHED_FLAG = 1;
+        }
+        void clear_tsk_need_resched() {
+            RESCHED_FLAG = 0;
+        }
+        int test_tsk_signal_pending() {
+            return SIGPENDING_FLAG == 1;
+        }
+
+        int signal_pending_state(long state)
+        {
+            if (!(state & (TASK_INTERRUPTIBLE | TASK_WAKEKILL)))
+                return 0;
+            if (!test_tsk_signal_pending())
+                return 0;
+
+            return (state & TASK_INTERRUPTIBLE); // TODO: || __fatal_signal_pending(p);
         }
 
         
