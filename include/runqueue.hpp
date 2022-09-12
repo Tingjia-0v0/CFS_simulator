@@ -27,6 +27,10 @@ class cfs_rq {
 
         struct rb_root_cached tasks_timeline;
 
+        int sched_nr_latency = 8;
+        unsigned int sysctl_sched_min_granularity		= 750000ULL;
+        unsigned int sysctl_sched_latency			= 6000000ULL;
+
         cfs_rq(int _cpu) {
             // tasks_timeline = new rb_tree();
             weight = 0;
@@ -224,10 +228,46 @@ class cfs_rq {
             }
             se->exec_start = jiffies_to_msecs(jiffies) * 100000;
             curr = se;
+
+            se->prev_sum_exec_runtime = se->sum_exec_runtime;
             debug_tasktimeline(&tasks_timeline);
         }
 
+        unsigned long sched_slice(sched_entity * se) {
+            unsigned long slice = __sched_period(nr_running + !se->on_rq);
+            if (!se->on_rq) {
+                weight += se->weight;
+            }
+            slice = __calc_delta(slice, se->weight, weight);
+
+            return slice;
+        }
+
+        sched_entity * __pick_first_entity() {
+            rb_node *left = rb_first_cached(&tasks_timeline);
+            if (!left) return NULL;
+            return left->se;
+        }
+
+            
     private:
+
+        
+
+        unsigned int __calc_delta(unsigned int delta_exec, unsigned long se_weight, unsigned int cfs_weight)
+        {
+            return delta_exec * se_weight / cfs_weight;
+        }
+
+
+
+        unsigned long __sched_period(unsigned long nr_running) {
+            if (nr_running > sched_nr_latency)
+                return nr_running * sysctl_sched_min_granularity;
+            else
+                return sysctl_sched_latency;
+        }
+
         void enqueue_load_avg(sched_entity *se)
         {
             avg->load_avg += se->avg->load_avg;
@@ -321,12 +361,7 @@ class cfs_rq {
             rb_erase_cached(&se->run_node, &tasks_timeline);
         }
 
-        sched_entity * __pick_first_entity() {
-            rb_node *left = rb_first_cached(&tasks_timeline);
-            if (!left) return NULL;
-            return left->se;
-        }
-
+        
         sched_entity * __pick_next_entity(sched_entity * se) {
             rb_node *next = rb_next(&se->run_node);
             if (!next)
@@ -348,13 +383,15 @@ class rq {
 
         cfs_rq *        cfs_runqueue;
 
-        int sched_nr_latency = 8;
-
         task * curr, * idle, * stop;
 
         int __preempt_count;
 
         int NEED_RESCHED_FLAG;
+
+        int sched_nr_latency = 8;
+        unsigned int sysctl_sched_min_granularity		= 750000ULL;
+        unsigned int sysctl_sched_latency			= 6000000ULL;
 
         rq(int _cpu) {
             nr_running = 0;
@@ -416,6 +453,40 @@ class rq {
             check_preempt_wakeup(p, flags);
         }
 
+        void check_preempt_tick(sched_entity * _curr) {
+            unsigned long ideal_runtime, delta_exec;
+            sched_entity * se;
+            signed long delta;
+
+            ideal_runtime = cfs_runqueue->sched_slice(_curr);
+
+            /* delta_exec: exec time in this round */
+            delta_exec = _curr->sum_exec_runtime - _curr->prev_sum_exec_runtime;
+
+            if (delta_exec > ideal_runtime) {
+                resched_curr();
+                /*
+                * The current task ran long enough, ensure it doesn't get
+                * re-elected due to buddy favours.
+                */
+                cfs_runqueue->clear_buddies(_curr);
+                return;
+            }
+
+            if (delta_exec < sysctl_sched_min_granularity)
+                return;
+
+            se = cfs_runqueue->__pick_first_entity();
+            delta = _curr->vruntime - se->vruntime;
+
+            if (delta < 0)
+                return;
+
+            if (delta > ideal_runtime)
+                resched_curr();
+
+        }
+
         void schedule() {
             do {
                 // preempt_disable();
@@ -433,7 +504,31 @@ class rq {
             preempt_count_inc(); 
         }
 
+        void scheduler_tick(void) {
+            preempt_disable();
+            
+        }
+
     private:
+
+        void task_tick_fair(task *_curr, int queued) {
+            entity_tick(curr->se, queued);
+        }
+
+        void entity_tick(sched_entity * _curr, int queued) {
+            cfs_runqueue->update_curr();
+            cfs_runqueue->update_load_avg(_curr, UPDATE_TG);
+            if (queued) {
+                resched_curr();
+                return;
+            }
+
+            if (cfs_runqueue->nr_running > 1) {
+                check_preempt_tick(_curr);
+            }
+                
+        }    
+
         void preempt_count_dec() {
             preempt_count_sub(1);
         }
@@ -505,6 +600,7 @@ class rq {
             cfs_runqueue->h_nr_running--;
             sub_nr_running(1);
         }
+
 
         void check_preempt_wakeup(task * p, int wake_flags) {
             sched_entity * se = curr->se;
