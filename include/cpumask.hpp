@@ -34,6 +34,9 @@ class cpumask {
         int test_cpu(int n) {
             return test_bit(n, bits, NR_CPU);
         }
+        int clear_cpu(int n) {
+            bits[n] = 0;
+        }
         void set(int n) {
             bits[n] = 1;
         }
@@ -61,6 +64,10 @@ class cpumask {
 
         static int cpumask_equal(const cpumask *src1, const cpumask * src2) {
             return bitmap_equal(src1->bits, src2->bits, NR_CPU);
+        }
+
+        static int cpumask_subset(const cpumask * src1, const cpumask * src2) {
+            return bitmap_subset(src1->bits, src2->bits, NR_CPU);
         }
 
         

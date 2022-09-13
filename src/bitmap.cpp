@@ -56,3 +56,13 @@ int bitmap_equal(const unsigned long *src1, const unsigned long *src2,
     }
     return 1;
 }
+
+/* return 1 if src1 is a subset of src2 */
+int bitmap_subset(const unsigned long *src1, const unsigned long *src2, 
+                  unsigned long size) {
+    int r = 1;
+    for (unsigned long i = 0; i < size; i++) {
+        if (src1[i] != 0 && src2[i] == 0) r = 0;
+    }
+    return r;
+}

@@ -64,6 +64,9 @@ class sched_domain {
         cpumask * span;
         sched_domain_topology_level * topology_level;
 
+        /* unit: jiffies, 25 * 4ms */
+        unsigned long max_load_balance_interval = HZ/10;
+
     public:
         sched_domain(sched_domain_topology_level * tl, const cpumask * cpu_map, 
                      sched_domain * _child, int cpu,
@@ -93,6 +96,17 @@ class sched_domain {
             last->next = first;
             groups = first;
             return 0;
+        }
+
+
+        unsigned long get_sd_balance_interval(int cpu_busy) {
+            unsigned long interval = balance_interval;
+            if (cpu_busy) interval = interval * busy_factor;
+            interval = msecs_to_jiffies(interval);
+            if (interval < 1) interval = 1;
+            if (interval > max_load_balance_interval) interval = max_load_balance_interval;
+
+            return interval;
         }
 
         sched_group * get_group(int cpu);

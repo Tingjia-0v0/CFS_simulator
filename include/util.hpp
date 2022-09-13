@@ -51,7 +51,10 @@
          cpu = mask->next(cpu), _first = 0 )
 
 # define for_each_domain(_sd, cpu)   \
-    for (_sd = runqueues[cpu]->sd; _sd; _sd = tmp->parent)
+    for (_sd = runqueues[cpu]->sd; _sd; _sd = _sd->parent)
+
+# define for_each_domain_rq(_sd)   \
+    for (_sd = this->sd; _sd; _sd = _sd->parent)
 
 #define LOAD_AVG_PERIOD 32
 #define LOAD_AVG_MAX 47742
@@ -116,5 +119,22 @@
 #define WF_FORK		0x02		/* child wakeup after fork */
 #define WF_MIGRATED	0x4		/* internal use, task got migrated */
 
+#define CPU_IDLE            0
+#define	CPU_NOT_IDLE        1
+#define	CPU_NEWLY_IDLE      2
+#define	CPU_MAX_IDLE_TYPES  3
+
 #define sysctl_sched_wakeup_granularity 1000000UL
+
+
+#define regular         0
+#define remote          1
+#define all             2
+
+#define LBF_ALL_PINNED	0x01
+#define LBF_NEED_BREAK	0x02
+#define LBF_DST_PINNED  0x04
+#define LBF_SOME_PINNED	0x08
+
+#define MAX_PINNED_INTERVAL	512
 # endif

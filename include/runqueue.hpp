@@ -249,6 +249,15 @@ class cfs_rq {
             return left->se;
         }
 
+
+        int update_cfs_rq_load_avg(unsigned long now) {
+            int decayed = 0;
+            decayed |= __update_load_avg_cfs_rq(now, cpu);
+            // avg->debug_load_avg();
+            return decayed;
+        }
+
+
             
     private:
 
@@ -296,13 +305,6 @@ class cfs_rq {
         void account_entity_dequeue(sched_entity * se) {
             weight -= se->weight;
             nr_running --;
-        }
-
-        int update_cfs_rq_load_avg(unsigned long now) {
-            int decayed = 0;
-            decayed |= __update_load_avg_cfs_rq(now, cpu);
-            // avg->debug_load_avg();
-            return decayed;
         }
 
         int __update_load_avg_cfs_rq(unsigned long now, int cpu)
@@ -383,7 +385,13 @@ class rq {
 
         cfs_rq *        cfs_runqueue;
 
+        unsigned char   idle_balance;
+
         task * curr, * idle, * stop;
+
+        unsigned long   next_balance;
+
+        unsigned long max_idle_balance_cost;
 
         int __preempt_count;
 
@@ -392,6 +400,7 @@ class rq {
         int sched_nr_latency = 8;
         unsigned int sysctl_sched_min_granularity		= 750000ULL;
         unsigned int sysctl_sched_latency			= 6000000ULL;
+        unsigned int sysctl_sched_migration_cost	= 500000UL;
 
         rq(int _cpu) {
             nr_running = 0;
@@ -408,9 +417,13 @@ class rq {
             curr = idle;
             idle->state = TASK_RUNNING;
             NEED_RESCHED_FLAG = 0;
-
+        
             __preempt_count = 0;
 
+            idle_balance = 1;
+
+            next_balance = jiffies;
+            max_idle_balance_cost = 0;
         }
 
         /*
@@ -504,16 +517,28 @@ class rq {
             preempt_count_inc(); 
         }
 
-        void scheduler_tick(void) {
-            preempt_disable();
-            
-        }
+        
 
-    private:
+        int idle_cpu() {
+            if (curr != idle)
+                return 0;
+            if (nr_running)
+                return 0;
+            return 1;
+        }
+        
+        void update_blocked_averages()
+        {
+            unsigned long now = jiffies_to_msecs(jiffies) * 1000000;
+            cfs_runqueue->update_cfs_rq_load_avg(now);
+        }
 
         void task_tick_fair(task *_curr, int queued) {
             entity_tick(curr->se, queued);
         }
+
+    private:
+
 
         void entity_tick(sched_entity * _curr, int queued) {
             cfs_runqueue->update_curr();
@@ -532,6 +557,7 @@ class rq {
         void preempt_count_dec() {
             preempt_count_sub(1);
         }
+        
         int preempt_count_dec_and_test() {
             preempt_count_sub(1);
             return should_resched(0);
@@ -584,6 +610,7 @@ class rq {
         void sub_nr_running(unsigned int count) {
             nr_running = nr_running - count;
         }
+        
         void enqueue_task(task * p, int flags) {
             cfs_runqueue->enqueue_entity(p->se, flags);
             /* TODO: check if se is a task 

@@ -20,5 +20,7 @@ int bitmap_or(unsigned long *dsp, const unsigned long *src1, const unsigned long
 
 int bitmap_equal(const unsigned long *src1, const unsigned long *src2, 
                  unsigned long size);
-
+                 
+int bitmap_subset(const unsigned long *src1, const unsigned long *src2, 
+                  unsigned long size);
 #endif

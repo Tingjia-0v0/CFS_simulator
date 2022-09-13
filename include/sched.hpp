@@ -6,6 +6,33 @@
 # include "jiffies.hpp"
 # include "task.hpp"
 
+
+struct lb_env {
+	sched_domain	*sd;
+
+	rq		        *src_rq;
+	int			    src_cpu;
+
+	int			    dst_cpu;
+	rq		        *dst_rq;
+
+	cpumask		    *dst_grpmask;
+	int			    new_dst_cpu;
+	int	            cpu_idle;
+	long			imbalance;
+	/* The set of CPUs under consideration for load-balancing */
+	cpumask		    *cpus;
+
+	unsigned int		flags;
+
+	unsigned int		loop;
+	unsigned int		loop_break;
+	unsigned int		loop_max;
+
+	int         		fbq_type;
+    std::vector<task *>      tasks;
+};
+
 class sched {
     public:
         std::vector<rq *> runqueues;
@@ -16,6 +43,9 @@ class sched {
         int sched_domain_level_max;
 
         int cur_pid = 0; 
+
+        const unsigned int sched_nr_migrate_break = 32;
+        const unsigned int sysctl_sched_nr_migrate = 32;
 
     public:
         sched(const std::string & filename) {
@@ -96,6 +126,15 @@ class sched {
             } 
         }
 
+        void scheduler_tick(int dst_cpu) {
+            runqueues[dst_cpu]->preempt_disable();
+            runqueues[dst_cpu]->task_tick_fair(runqueues[dst_cpu]->curr, 0);
+
+            runqueues[dst_cpu]->idle_balance = runqueues[dst_cpu]->idle_cpu();
+
+            trigger_load_balance(dst_cpu); 
+        }
+
         void debug_rqlen() {
             std::cout << "The Queue Length of Each Runqueue" << std::endl;
             int i;
@@ -114,6 +153,315 @@ class sched {
         }
 
     private:
+
+
+        void trigger_load_balance(int dst_cpu) {
+            if (jiffies >= runqueues[dst_cpu] -> next_balance) {
+                run_rebalance_domains(dst_cpu);
+            }
+        }
+
+        void run_rebalance_domains(int dst_cpu) {
+            int cpu_idle = runqueues[dst_cpu] -> idle_balance ?
+					   CPU_IDLE : CPU_NOT_IDLE;
+            rebalance_domains(dst_cpu, cpu_idle);
+        }
+
+        void rebalance_domains(int dst_cpu, int cpu_idle) {
+            int continue_balancing = 1;
+            unsigned long interval;
+            sched_domain * _sd;
+            /* Earliest time when we have to do rebalance again: After 60s */
+            unsigned long _next_balance = jiffies + 60 * HZ;
+            int update_next_balance = 0;
+            int need_serialize, need_decay = 0;
+            unsigned long max_cost = 0;
+
+            runqueues[dst_cpu] -> update_blocked_averages();
+
+            for_each_domain(_sd, dst_cpu) {
+                /*
+                 * Decay the newidle max times here because this is a regular
+                 * visit to all the domains. Decay ~1% per second.
+                 */
+                if (jiffies > _sd->next_decay_max_lb_cost) {
+                    _sd->max_newidle_lb_cost =
+                        (_sd->max_newidle_lb_cost * 253) / 256;
+                    _sd->next_decay_max_lb_cost = jiffies + HZ;
+                    need_decay = 1;
+                }
+
+                max_cost += _sd->max_newidle_lb_cost;
+
+                if (!continue_balancing) {
+                    /* need to update the cost information on the following loops */
+                    if (need_decay)
+                        continue;
+                    break;
+                }
+
+                interval = _sd->get_sd_balance_interval(cpu_idle != CPU_IDLE);
+
+                if ( jiffies >= _sd->last_balance + interval) {
+
+                    if (load_balance(dst_cpu, _sd, cpu_idle, &continue_balancing)) {
+                        /*
+                        * The LBF_DST_PINNED logic could have changed
+                        * env->dst_cpu, so we can't know our idle
+                        * state even if we migrated tasks. Update it.
+                        */
+                        cpu_idle = runqueues[dst_cpu]->idle_cpu() ? CPU_IDLE : CPU_NOT_IDLE;
+                    }
+                    _sd->last_balance = jiffies;
+                    interval = _sd->get_sd_balance_interval(cpu_idle != CPU_IDLE);
+                }
+
+                /* the ealist next_balance timestamp among all sds */
+                if (_next_balance > _sd->last_balance + interval) {
+                    _next_balance = _sd->last_balance + interval;
+                    update_next_balance = 1;
+                }
+
+            }
+
+            if (need_decay) {
+                /*
+                * Ensure the rq-wide value also decays but keep it at a
+                * reasonable floor to avoid funnies with rq->avg_idle.
+                */
+                if (runqueues[dst_cpu] -> sysctl_sched_migration_cost > max_cost)
+                    runqueues[dst_cpu] -> max_idle_balance_cost 
+                        = runqueues[dst_cpu] -> sysctl_sched_migration_cost;
+                else
+                    runqueues[dst_cpu] -> max_idle_balance_cost = max_cost;
+            }
+            if (update_next_balance)
+                runqueues[dst_cpu] -> next_balance = _next_balance;
+        }
+
+        int load_balance(int this_cpu, sched_domain *sd, 
+                         int cpu_idle, int *continue_balancing) {
+            int ld_moved, cur_ld_moved;
+            sched_domain *sd_parent = sd->parent;
+            sched_group *group;
+            rq *busiest;
+            cpumask *cpus;
+
+            struct lb_env env = {
+                .sd		    = sd,
+                .src_rq     = NULL,
+                .src_cpu    = -1,
+                .dst_cpu	= this_cpu,
+                .dst_rq		= runqueues[this_cpu],
+                
+                .dst_grpmask    = sd->groups->span,
+                .new_dst_cpu    = -1,
+                .cpu_idle		= cpu_idle,
+                .imbalance      = 0,
+                .cpus		    = new cpumask(cpu_online_mask),
+                .flags          = 0,
+                .loop           = 0,
+                .loop_break	= sched_nr_migrate_break,
+                .loop_max   = 0,
+
+                .fbq_type	= all,
+                .tasks		= {}
+            };
+
+            cpumask::cpumask_and(cpus, sd->span, cpu_online_mask);
+
+            choose_src_rq(&env, &ld_moved, sd_parent, sd, busiest, cpus, continue_balancing, cpu_idle);
+
+            return ld_moved;
+        }
+
+        void choose_src_rq(struct lb_env *env, int * ld_moved, 
+                           sched_domain * sd_parent, sched_domain * sd,
+                           rq * busiest, cpumask *cpus, int * continue_balancing, int cpu_idle) {
+            if (!should_we_balance(env)) {
+                continue_balancing = 0;
+                out_balanced(env, sd_parent, sd, ld_moved);
+                return;
+            }
+            sched_group * group = find_busiest_group(env);
+            if (!group) {
+                out_balanced(env, sd_parent, sd, ld_moved);
+                return;
+            }
+
+            rq * busiest = find_busiest_queue(&env, group);
+            if (!busiest) {
+                out_balanced(env, sd_parent, sd, ld_moved);
+                return;
+            }
+            env->src_cpu = busiest->cpu;
+	        env->src_rq = busiest;
+
+	        ld_moved = 0;
+
+            if (busiest->nr_running > 1) {
+                /*
+                * Attempt to move tasks. If find_busiest_group has found
+                * an imbalance but busiest->nr_running <= 1, the group is
+                * still unbalanced. ld_moved simply stays zero, so it is
+                * correctly treated as an imbalance.
+                */
+                env->flags |= LBF_ALL_PINNED;
+                if (sysctl_sched_nr_migrate < busiest->nr_running)
+                    env->loop_max = sysctl_sched_nr_migrate;
+                else
+                    env->loop_max = busiest->nr_running;
+            }
+            do_migrate(env, ld_moved, sd_parent, sd, busiest, cpus, continue_balancing, cpu_idle);
+            // tail();
+        }
+
+        void do_migrate(struct lb_env *env, int * ld_moved, 
+                        sched_domain * sd_parent, sched_domain * sd,
+                        rq * busiest, cpumask *cpus, int * continue_balancing, int cpu_idle) {
+            if (busiest->nr_running > 1) {
+                int cur_ld_moved = detach_tasks(env);
+                if (cur_ld_moved) {
+                    attach_tasks(env);
+                    *(ld_moved) += cur_ld_moved;
+                }
+                if (env->flags & LBF_NEED_BREAK) {
+                    env->flags &= ~LBF_NEED_BREAK;
+                    do_migrate(env, ld_moved, sd_parent, sd, busiest, cpus, continue_balancing, cpu_idle);
+                    return;
+                }
+                if ((env->flags & LBF_DST_PINNED) && env->imbalance > 0) {
+
+                    /* Prevent to re-select dst_cpu via env's cpus */
+                    env->cpus->clear_cpu(env->dst_cpu);
+
+                    env->dst_rq	 = runqueues[env->new_dst_cpu];
+                    env->dst_cpu	 = env->new_dst_cpu;
+                    env->flags	&= ~LBF_DST_PINNED;
+                    env->loop	 = 0;
+                    env->loop_break	 = sched_nr_migrate_break;
+
+                    /*
+                    * Go back to "more_balance" rather than "redo" since we
+                    * need to continue with same src_cpu.
+                    */
+                    do_migrate(env, ld_moved, sd_parent, sd, busiest, cpus, continue_balancing, cpu_idle);
+                    return;
+                }
+                if (sd_parent) {
+                    int *group_imbalance = &sd_parent->groups->sgc->imbalance;
+
+                    if ((env->flags & LBF_SOME_PINNED) && env->imbalance > 0)
+                        *group_imbalance = 1;
+                }
+                if (env->flags & LBF_ALL_PINNED) {
+                    cpus->clear_cpu(busiest->cpu);
+                    /*
+                    * Attempting to continue load balancing at the current
+                    * sched_domain level only makes sense if there are
+                    * active CPUs remaining as possible busiest CPUs to
+                    * pull load from which are not contained within the
+                    * destination group that is receiving any migrated
+                    * load.
+                    */
+                    if (!cpumask::cpumask_subset(cpus, env->dst_grpmask)) {
+                        env->loop = 0;
+                        env->loop_break = sched_nr_migrate_break;
+                        choose_src_rq(env, ld_moved, sd_parent, sd, busiest, cpus, continue_balancing, cpu_idle);
+                        return;
+                    }
+                    out_all_pinned(env, sd, ld_moved);
+                    return;
+                }
+            }
+            do_active_balance(env, sd_parent, sd, ld_moved, cpu_idle);
+            return;
+
+        }
+
+        void do_active_balance(struct lb_env * env, sched_domain * sd_parent, sched_domain * sd, int * ld_moved, int cpu_idle) {
+            int active_balance = 0;
+            if (!ld_moved) {
+                if (cpu_idle != CPU_NEWLY_IDLE)
+                    sd->nr_balance_failed++;
+
+                /* TODO: active_balance for asym cpu topology */
+            } else
+                sd->nr_balance_failed = 0;
+
+            if (!active_balance) 
+                /* We were unbalanced, so reset the balancing interval */
+                sd->balance_interval = sd->min_interval;
+
+            return;
+        }
+
+        void out_balanced(struct lb_env * env, sched_domain * sd_parent, sched_domain * sd, int * ld_moved) {
+            if (sd_parent) {
+                if (sd_parent->groups->sgc->imbalance)
+                    sd_parent->groups->sgc->imbalance = 0;
+            }
+            out_all_pinned(env, sd, ld_moved);
+            return;
+        }
+
+        void out_all_pinned(struct lb_env * env, sched_domain * sd, int * ld_moved) {
+            sd->nr_balance_failed = 0;
+            out_one_pinned(env, sd, ld_moved);
+            return;
+        }
+
+        void out_one_pinned(struct lb_env * env, sched_domain * sd, int * ld_moved) {
+            if (( (env->flags & LBF_ALL_PINNED) && sd->balance_interval < MAX_PINNED_INTERVAL) 
+                || (sd->balance_interval < sd->max_interval))
+                sd->balance_interval *= 2;
+
+            ld_moved = 0;
+            return;
+        }
+
+
+
+
+        int should_we_balance(struct lb_env *env)
+        {
+            sched_group *sg = env->sd->groups;
+            int cpu, balance_cpu = -1;
+
+            /*
+            * Ensure the balancing environment is consistent; can happen
+            * when the softirq triggers 'during' hotplug.
+            */
+            if (!env->cpus->test_cpu(env->dst_cpu))
+                return 0;
+
+            /*
+            * In the newly idle case, we will allow all the cpu's
+            * to do the newly idle load balance.
+            */
+            if (env->cpu_idle == CPU_NEWLY_IDLE)
+                return 1;
+            cpumask * tmp = new cpumask();
+            cpumask::cpumask_and(tmp, sg->sgc->span, env->cpus);
+            /* Try to find first idle cpu */
+            for_each_cpu(cpu, tmp) {
+                if (!idle_cpu(cpu))
+                    continue;
+
+                balance_cpu = cpu;
+                break;
+            }
+
+            if (balance_cpu == -1)
+                balance_cpu = cpumask::cpumask_first(sg->sgc->span);
+
+            /*
+            * First idle cpu or the first cpu(busiest) in this sched group
+            * is eligible for doing load balancing at this and above domains.
+            */
+            return balance_cpu == env->dst_cpu;
+        }
+
 
         int select_task_rq(task * p, int cur_cpu) {
             if (p->nr_cpus_allowed > 1)
@@ -242,6 +590,7 @@ class sched {
         }
 
         int idle_cpu(int cpu) {
+            if (runqueues[cpu]->curr == idle) return 0;
             if (runqueues[cpu]->nr_running) return 0;
             return 1;
 
