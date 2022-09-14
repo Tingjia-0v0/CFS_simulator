@@ -33,6 +33,41 @@ struct lb_env {
     std::vector<task *>      tasks;
 };
 
+/*
+ * sg_lb_stats - stats of a sched_group required for load_balancing
+ */
+struct sg_lb_stats {
+	unsigned long avg_load; /*Avg load across the CPUs of the group */
+	unsigned long group_load; /* Total load over the CPUs of the group */
+	unsigned long sum_weighted_load; /* Weighted load of group's tasks */
+	unsigned long load_per_task;
+	unsigned long group_capacity;
+	unsigned long group_util; /* Total utilization of the group */
+	unsigned int sum_nr_running; /* Nr tasks running in the group */
+	unsigned int idle_cpus;
+	unsigned int group_weight;
+	int group_type; /* 0: other, 1: imbalance, 2: overloaded */
+	int group_no_capacity;
+
+};
+
+/*
+ * sd_lb_stats - Structure to store the statistics of a sched_domain
+ *		 during load balancing.
+ */
+struct sd_lb_stats {
+	struct sched_group *busiest;	/* Busiest group in this sd */
+	struct sched_group *local;	/* Local group in this sd */
+	unsigned long total_running;
+	unsigned long total_load;	/* Total load of all groups in sd */
+	unsigned long total_capacity;	/* Total capacity of all groups in sd */
+	unsigned long avg_load;	/* Average load across all groups in sd */
+
+	struct sg_lb_stats busiest_stat;/* Statistics of the busiest group */
+	struct sg_lb_stats local_stat;	/* Statistics of the local group */
+};
+
+
 class sched {
     public:
         std::vector<rq *> runqueues;
@@ -480,6 +515,263 @@ class sched {
             return find_idlest_cpu(sd, p, cur_cpu);
         }
 
+        sched_group *find_busiest_group(struct lb_env *env) {
+            struct sg_lb_stats *local, *busiest;
+            struct sd_lb_stats sds;
+
+            init_sd_lb_stats(&sds);
+
+            update_sd_lb_stats(env, &sds);
+
+            local = &sds.local_stat;
+            busiest = &sds.busiest_stat;
+
+            if (!sds.busiest || busiest->sum_nr_running == 0) {
+                env->imbalance = 0;
+                return NULL;
+            }
+            sds.avg_load = (SCHED_CAPACITY_SCALE * sds.total_load)
+						    / sds.total_capacity;
+            if (busiest->group_type == group_imbalanced) {
+                calculate_imbalance(env, &sds);
+                return sds.busiest;
+            }
+            if (env->cpu_idle != CPU_NOT_IDLE && group_has_capacity(env, local) &&
+                busiest->group_no_capacity) {
+                calculate_imbalance(env, &sds);
+                return sds.busiest;
+            }
+
+            if (local->avg_load >= busiest->avg_load) {
+                env->imbalance = 0;
+                return NULL;
+            }
+
+            if (local->avg_load >= sds.avg_load) {
+                env->imbalance = 0;
+                return NULL;
+            }
+
+            if (env->cpu_idle == CPU_IDLE) {
+                /*
+                * This cpu is idle. If the busiest group is not overloaded
+                * and there is no imbalance between this and busiest group
+                * wrt idle cpus, it is balanced. The imbalance becomes
+                * significant if the diff is greater than 1 otherwise we
+                * might end up to just move the imbalance on another group
+                */
+                if ((busiest->group_type != group_overloaded) &&
+                        (local->idle_cpus <= (busiest->idle_cpus + 1))) {
+                    env->imbalance = 0;
+                    return NULL;
+                }
+            } else {
+                /*
+                * In the CPU_NEWLY_IDLE, CPU_NOT_IDLE cases, use
+                * imbalance_pct to be conservative.
+                */
+                // imbalance_pct 110 / 117
+                if (100 * busiest->avg_load <=
+                        env->sd->imbalance_pct * local->avg_load) {
+                    env->imbalance = 0;
+                    return NULL;
+                }
+            }
+            calculate_imbalance(env, &sds);
+            return sds.busiest;
+
+        }
+
+        void init_sd_lb_stats(struct sd_lb_stats * sds) {
+            *sds = (struct sd_lb_stats){
+                .busiest = NULL,
+                .local = NULL,
+                .total_running = 0UL,
+                .total_load = 0UL,
+                .total_capacity = 0UL,
+                .avg_load   = 0UL,
+                .busiest_stat = {
+                    .avg_load = 0UL,
+                    .group_load = 0UL,
+                    .sum_weighted_load = 0UL,
+                    .load_per_task = 0UL,
+                    .group_capacity = 0UL,
+                    .group_util = 0UL,
+                    .sum_nr_running = 0,
+                    .idle_cpus = 0,
+                    .group_weight = 0,
+                    .group_type = group_other,
+                    .group_no_capacity = 0,
+                },
+                .local_stat = {
+                    .avg_load = 0UL,
+                    .group_load = 0UL,
+                    .sum_weighted_load = 0UL,
+                    .load_per_task = 0UL,
+                    .group_capacity = 0UL,
+                    .group_util = 0UL,
+                    .sum_nr_running = 0,
+                    .idle_cpus = 0,
+                    .group_weight = 0,
+                    .group_type = group_other,
+                    .group_no_capacity = 0
+                },
+            };
+        }
+
+        void update_sd_lb_stats(struct lb_env * env, struct sd_lb_stats * sds) {
+            sched_domain *child = env->sd->child;
+            sched_group *sg = env->sd->groups;
+            struct sg_lb_stats *local = &sds->local_stat;
+            struct sg_lb_stats tmp_sgs;
+            int load_idx, prefer_sibling = 0;
+            bool overload = false;
+            int i = 0;
+
+            /* TODO: set reasonable prefer_sibling for different sd level */
+            // if (child && child->flags & SD_PREFER_SIBLING)
+            //     prefer_sibling = 1;
+            // load_idx = get_sd_load_idx(env->sd, env->cpu_idle);
+
+            do {
+                struct sg_lb_stats *sgs = &tmp_sgs;
+                int local_group;
+
+                local_group = sg->span->test_cpu(env->dst_cpu);
+
+                if (local_group) {
+                    sds->local = sg;
+                    sgs = local;
+                }
+                update_sg_lb_stats(env, sg, local_group, sgs, &overload);
+                if (local_group) {
+                    sds->total_running += sgs->sum_nr_running;
+                    sds->total_load += sgs->group_load;
+                    sds->total_capacity += sgs->group_capacity;
+                    sg = sg->next;
+                    continue;
+                }
+                
+                if (sds->local && group_has_capacity(env, local) &&
+                    (sgs->sum_nr_running > local->sum_nr_running + 1)) {
+                    
+                    sgs->group_no_capacity = 1;
+                    sgs->group_type = group_classify(sg, sgs);
+                }
+
+                if (update_sd_pick_busiest(env, sds, sg, sgs)) {
+                    sds->busiest = sg;
+                    sds->busiest_stat = *sgs;
+                }
+
+                sds->total_running += sgs->sum_nr_running;
+                sds->total_load += sgs->group_load;
+                sds->total_capacity += sgs->group_capacity;
+                sg = sg->next;
+            } while (sg != env->sd->groups);
+
+        } 
+
+        void update_sg_lb_stats(struct lb_env *env,
+                                struct sched_group *group,
+                                int local_group, struct sg_lb_stats *sgs,
+                                bool *overload) {
+            unsigned long load;
+            int i, nr_running;
+
+            memset(sgs, 0, sizeof(*sgs));
+            cpumask * tmp = new cpumask();
+            cpumask::cpumask_and(tmp, group->span, env->cpus);
+            for_each_cpu(i, tmp) {
+                load = runqueues[i]->cfs_runqueue->avg->runnable_load_avg;
+                
+                unsigned long util = runqueues[i]->cfs_runqueue->avg->util_avg; // 1024 * runnable %
+	            unsigned long capacity = SCHED_CAPACITY_SCALE;                  // 1024
+
+                sgs->group_load += load;
+                sgs->group_util += (util >= capacity) ? capacity : util;
+                sgs->sum_nr_running += runqueues[i]->cfs_runqueue->h_nr_running;
+
+                nr_running = runqueues[i]->nr_running;
+                if (nr_running > 1)
+                    *overload = true;
+                sgs->sum_weighted_load += runqueues[i]->cfs_runqueue->avg->runnable_load_avg;
+
+                if (!nr_running && idle_cpu(i))
+                    sgs->idle_cpus++;
+            }
+            sgs->group_capacity = group->sgc->capacity;
+            sgs->avg_load = (sgs->group_load*SCHED_CAPACITY_SCALE) / sgs->group_capacity; // average load each cpu
+
+            if (sgs->sum_nr_running)
+                sgs->load_per_task = sgs->sum_weighted_load / sgs->sum_nr_running;
+
+            sgs->group_weight = group->group_weight;
+
+            sgs->group_no_capacity = group_is_overloaded(env, sgs);
+            sgs->group_type = group_classify(group, sgs);
+
+        }
+
+        bool update_sd_pick_busiest(struct lb_env *env,
+				   struct sd_lb_stats *sds,
+				   struct sched_group *sg,
+				   struct sg_lb_stats *sgs)
+        {
+            struct sg_lb_stats *busiest = &sds->busiest_stat;
+
+            if (sgs->group_type > busiest->group_type) {
+                return true;
+            }
+
+            if (sgs->group_type < busiest->group_type) {
+                return false;
+            }
+
+            if (sgs->avg_load <= busiest->avg_load) {
+                return false;
+            }
+                
+            return true;
+        }
+
+        bool group_is_overloaded(struct lb_env *env, struct sg_lb_stats *sgs)
+        {
+            if (sgs->sum_nr_running <= sgs->group_weight)
+                return false;
+
+            if ((sgs->group_capacity * 100) <
+                    (sgs->group_util * env->sd->imbalance_pct))
+                return true;
+
+            return false;
+        }
+
+        bool
+        group_has_capacity(struct lb_env *env, struct sg_lb_stats *sgs)
+        {
+            if (sgs->sum_nr_running < sgs->group_weight)
+                return true;
+
+            if ((sgs->group_capacity * 100) >
+                    (sgs->group_util * env->sd->imbalance_pct))
+                return true;
+
+            return false;
+        }
+
+        int group_classify(struct sched_group *group,
+			  struct sg_lb_stats *sgs)
+        {
+            if (sgs->group_no_capacity)
+                return group_overloaded;
+
+            if (group->sgc->imbalance)
+                return group_imbalanced;
+
+            return group_other;
+        }
+
         int find_idlest_cpu(sched_domain * sd, task * p, int cpu) {
             int new_cpu = cpu;
             while(sd) {
@@ -623,7 +915,7 @@ class sched {
                 
                 for ( tmp_sd = d[cpu]; tmp_sd; tmp_sd = tmp_sd->parent ) {
                     if (cpu == cpumask::cpumask_first(tmp_sd->groups->sgc->span))
-                        update_group_capacity(cpu, tmp_sd);
+                        init_sched_groups_capacity(cpu, tmp_sd);
                 }
             }
 
@@ -633,6 +925,20 @@ class sched {
                 cpu_attach_domain(d[cpu], cpu);
 
             return 0;
+        }
+        void init_sched_groups_capacity(int cpu, sched_domain *sd)
+        {
+            sched_group *sg = sd->groups;
+            do {
+                sg->group_weight = cpumask::cpumask_weight(sg->span);
+
+                sg = sg->next;
+            } while (sg != sd->groups);
+
+            if (cpu != cpumask::cpumask_first(sg->sgc->span))
+                return;
+
+            update_group_capacity(cpu,sd);
         }
 
         void update_group_capacity(int cpu, sched_domain * sd) {

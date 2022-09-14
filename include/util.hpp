@@ -137,4 +137,8 @@
 #define LBF_SOME_PINNED	0x08
 
 #define MAX_PINNED_INTERVAL	512
+
+#define group_other         0
+#define	group_imbalanced    1
+#define	group_overloaded    2
 # endif
