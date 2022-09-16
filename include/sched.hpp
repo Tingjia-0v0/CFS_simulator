@@ -299,7 +299,7 @@ class sched {
                 .loop_break	= sched_nr_migrate_break,
                 .loop_max   = 0,
 
-                .fbq_type	= all,
+                .fbq_type	= all_,
                 .tasks		= {}
             };
 
@@ -324,7 +324,7 @@ class sched {
                 return;
             }
 
-            busiest = find_busiest_queue(&env, group);
+            busiest = find_busiest_queue(env, group);
             if (!busiest) {
                 out_balanced(env, sd_parent, sd, ld_moved);
                 return;
@@ -523,7 +523,7 @@ class sched {
                 
                 unsigned long capacity, wl;
                 tmp_rq = runqueues[i];
-                int rt = regular;
+                int rt = regular_;
                 if (rt > env->fbq_type)
                     continue;
                 capacity = tmp_rq->cpu_capacity;
@@ -1135,7 +1135,7 @@ class sched {
         }
 
         int num_online_cpus() {
-            cpumask::cpumask_weight(cpu_online_mask);
+            return cpumask::cpumask_weight(cpu_online_mask);
         }
 
         void init_cpus(const std::string & filename) {

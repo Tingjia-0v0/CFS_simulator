@@ -132,9 +132,9 @@
 #define sysctl_sched_wakeup_granularity 1000000UL
 
 
-#define regular         0
-#define remote          1
-#define all             2
+#define regular_         0
+#define remote_          1
+#define all_             2
 
 #define LBF_ALL_PINNED	0x01
 #define LBF_NEED_BREAK	0x02

@@ -3,7 +3,7 @@
 
 int cur_pid = 0;
 
-int start_new_task(sched * global_sched, int cur_cpu, cpumask * cpu_allowed, int nice, int nr_thread) {
+void start_new_task(sched * global_sched, int cur_cpu, cpumask * cpu_allowed, int nice, int nr_thread) {
     task * t = new task(cur_pid, cpu_allowed, nice, nr_thread);
     global_sched->wake_up_new_task(t, cur_cpu);
 }

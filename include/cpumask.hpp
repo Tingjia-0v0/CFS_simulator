@@ -43,7 +43,7 @@ class cpumask {
         int test_cpu(int n) {
             return test_bit(n, bits, NR_CPU);
         }
-        int clear_cpu(int n) {
+        void clear_cpu(int n) {
             bits[n] = 0;
         }
         void set(int n) {
