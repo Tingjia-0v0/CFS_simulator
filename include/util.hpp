@@ -141,4 +141,7 @@
 #define group_other         0
 #define	group_imbalanced    1
 #define	group_overloaded    2
+
+#define MIN(a,b) ((a)<(b) ? (a):(b))
+
 # endif

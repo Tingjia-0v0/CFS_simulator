@@ -195,8 +195,7 @@ class rq {
 
         void move_to_front_cfs_tasks(task *p);
 
-
-
+        unsigned long cpu_avg_load_per_task();
         
 
 };

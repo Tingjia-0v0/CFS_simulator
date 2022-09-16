@@ -681,3 +681,14 @@ void rq::move_to_front_cfs_tasks(task *p) {
     erase_from_cfs_tasks(p);
     add_to_cfs_tasks(p);
 }
+
+unsigned long rq::cpu_avg_load_per_task()
+{
+    unsigned long nr_running = cfs_runqueue->h_nr_running;
+    unsigned long load_avg = cfs_runqueue->avg->runnable_load_avg;
+
+    if (nr_running)
+        return load_avg / nr_running;
+
+    return 0;
+}

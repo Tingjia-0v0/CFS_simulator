@@ -582,6 +582,134 @@ class sched {
 
         }
 
+        void calculate_imbalance(struct lb_env *env, struct sd_lb_stats *sds) {
+            unsigned long max_pull, load_above_capacity = ~0UL;
+            struct sg_lb_stats *local, *busiest;
+
+            local = &sds->local_stat;
+            busiest = &sds->busiest_stat;
+
+            if (busiest->group_type == group_imbalanced) {
+                busiest->load_per_task =
+                    MIN(busiest->load_per_task, sds->avg_load);
+            }
+
+            if (busiest->avg_load <= sds->avg_load ||
+                local->avg_load >= sds->avg_load) {
+                env->imbalance = 0;
+                return fix_small_imbalance(env, sds);
+            }
+
+            if (busiest->group_type == group_overloaded &&
+                local->group_type   == group_overloaded) {
+                load_above_capacity = busiest->sum_nr_running * SCHED_CAPACITY_SCALE;
+                /* number of task > number of cpu
+                 * load_above_capacity = extra_task * 1024 / n_cpu
+                 */
+                if (load_above_capacity > busiest->group_capacity) {
+                    load_above_capacity -= busiest->group_capacity;
+                    load_above_capacity *= NICE_0_LOAD;
+                    load_above_capacity /= busiest->group_capacity;
+                } else
+                    load_above_capacity = ~0UL;
+            }
+
+            /*
+             * busiest->avg_load - sds->avg_load: extra avg_load per cpu compared to the sd
+             * load_above_capacity: extra avg_load per cpu compared to n_cpu
+             */
+            max_pull = MIN(busiest->avg_load - sds->avg_load, load_above_capacity);
+
+            /* max_pull * n_cpu or max_push * n_cpu 
+             * group-wise imbalance load between busiest and local
+             */
+            env->imbalance = MIN(
+                max_pull * busiest->group_capacity,
+                (sds->avg_load - local->avg_load) * local->group_capacity
+            ) / SCHED_CAPACITY_SCALE;
+
+            if (env->imbalance < busiest->load_per_task)
+                return fix_small_imbalance(env, sds);
+        }
+
+        void fix_small_imbalance(struct lb_env *env, struct sd_lb_stats *sds) {
+            unsigned long tmp, capa_now = 0, capa_move = 0;
+            unsigned int imbn = 2;
+            unsigned long scaled_busy_load_per_task;
+            struct sg_lb_stats *local, *busiest;
+
+            local = &sds->local_stat;
+            busiest = &sds->busiest_stat;
+
+            if (!local->sum_nr_running)
+                local->load_per_task = runqueues[env->dst_cpu]->cpu_avg_load_per_task();
+            else if (busiest->load_per_task > local->load_per_task)
+                imbn = 1;
+
+            /* load_per_task / n_cpu 
+             * (load_sum)/(nr_running_per_cpu * n_cpu) / n_cpu
+             */
+            scaled_busy_load_per_task =
+                (busiest->load_per_task * SCHED_CAPACITY_SCALE) /
+                busiest->group_capacity;
+            
+            /* average_load per cpu in this group plus
+             * load_per_task / n_cpu
+             * spread the load of one task in busiest group to all cpus in local group
+             */
+            if (busiest->avg_load + scaled_busy_load_per_task >=
+                local->avg_load + (scaled_busy_load_per_task * imbn)) {
+                env->imbalance = busiest->load_per_task;
+                return;
+            }
+
+            /*
+             * OK, we don't have enough imbalance to justify moving tasks,
+             * however we may be able to increase total CPU capacity used by
+             * moving them.
+             * 
+             * (load_sum)/(nr_running_per_cpu * n_cpu) * n_cpu = (load_sum)/(nr_running_per_cpu)
+             * avg_load * group_capacity: load_sum
+             * 
+             */
+
+            capa_now += busiest->group_capacity *
+                    MIN(busiest->load_per_task, busiest->avg_load);
+            capa_now += local->group_capacity *
+                    MIN(local->load_per_task, local->avg_load);
+            capa_now /= SCHED_CAPACITY_SCALE;
+
+            /* load_sum / n_cpu
+             * load_sum / n_task / n_cpu
+             * busiest->avg_load - scaled_busy_load_per_task: load per cpu after migragation
+             * (busiest->avg_load - scaled_busy_load_per_task) * group_capacity: load_sum after migragation * 1024
+             */
+            if (busiest->avg_load > scaled_busy_load_per_task) {
+                capa_move += busiest->group_capacity *
+                        MIN(busiest->load_per_task,
+                        busiest->avg_load - scaled_busy_load_per_task);
+            }
+
+            if (busiest->avg_load * busiest->group_capacity <
+                busiest->load_per_task * SCHED_CAPACITY_SCALE) {
+                tmp = (busiest->avg_load * busiest->group_capacity) /
+                    local->group_capacity;
+            } else {
+                tmp = (busiest->load_per_task * SCHED_CAPACITY_SCALE) /
+                    local->group_capacity;
+            }
+
+            capa_move += local->group_capacity *
+                    MIN(local->load_per_task, local->avg_load + tmp);
+            capa_move /= SCHED_CAPACITY_SCALE;
+
+            /* Move if we gain throughput */
+            if (capa_move > capa_now)
+                env->imbalance = busiest->load_per_task;
+
+
+        }
+
         void init_sd_lb_stats(struct sd_lb_stats * sds) {
             *sds = (struct sd_lb_stats){
                 .busiest = NULL,
