@@ -12,9 +12,25 @@ long find_next_bit(unsigned long *addr, unsigned long size,
     return -1;
 }
 
+long find_next_bit_and(unsigned long *addr1, unsigned long *addr2, 
+                       unsigned long size, long offset) {
+    for (long i = (offset + 1) % size; i != offset; i = (i+1) % size) {
+        if (addr1[i] != 0 && addr2[i] != 0) return i;
+    }
+    return -1;
+}
+
 long find_first_bit(const unsigned long *addr, unsigned long size) {
     for (unsigned long i = 0; i < size; i++) {
         if (addr[i] != 0) return i;
+    }
+    return -1;
+}
+
+long find_first_bit_and(const unsigned long *addr1, const unsigned long *addr2,
+                        unsigned long size) {
+    for (unsigned long i = 0; i < size; i++) {
+        if (addr1[i] != 0 && addr2[i] != 0) return i;
     }
     return -1;
 }

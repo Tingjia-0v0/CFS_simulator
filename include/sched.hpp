@@ -515,6 +515,33 @@ class sched {
             return find_idlest_cpu(sd, p, cur_cpu);
         }
 
+        rq *find_busiest_queue(struct lb_env *env, sched_group *group) {
+            rq *busiest = NULL, *tmp_rq;
+            unsigned long busiest_load = 0, busiest_capacity = 1;
+            int i;
+            for_each_cpu_and(i, group->span, env->cpus) {
+                
+                unsigned long capacity, wl;
+                tmp_rq = runqueues[i];
+                int rt = regular;
+                if (rt > env->fbq_type)
+                    continue;
+                capacity = tmp_rq->cpu_capacity;
+                wl = tmp_rq->cfs_runqueue->avg->runnable_load_avg;
+
+                /* this cpu only has one task and its load is too large */
+                if (tmp_rq->nr_running == 1 && wl > env->imbalance)
+                    continue;
+
+                if (wl * busiest_capacity > busiest_load * capacity) {
+                    busiest_load = wl;
+                    busiest_capacity = capacity;
+                    busiest = tmp_rq;
+                }
+            }
+            return busiest;
+        }
+
         sched_group *find_busiest_group(struct lb_env *env) {
             struct sg_lb_stats *local, *busiest;
             struct sd_lb_stats sds;

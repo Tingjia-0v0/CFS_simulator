@@ -50,6 +50,11 @@
          (cpu != mask->next(offset) || _first) && cpu != -1; \
          cpu = mask->next(cpu), _first = 0 )
 
+# define for_each_cpu_and(cpu, mask1, mask2) \
+    for (int _first = 1, cpu = mask1->first_and(mask2); \
+         (cpu != mask1->first_and(mask2) || _first) && cpu != -1; \
+         cpu = mask1->next_and(cpu, mask2), _first = 0 )
+
 # define for_each_domain(_sd, cpu)   \
     for (_sd = runqueues[cpu]->sd; _sd; _sd = _sd->parent)
 

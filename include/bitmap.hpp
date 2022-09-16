@@ -6,7 +6,13 @@
 long find_next_bit(unsigned long *addr, unsigned long size,
 			    long offset);
 
+long find_next_bit_and(unsigned long *addr1, unsigned long *addr2, 
+                       unsigned long size, long offset);
+
 long find_first_bit(const unsigned long *addr, unsigned long size);
+
+long find_first_bit_and(const unsigned long *addr1, const unsigned long *addr2,
+                        unsigned long size);
 
 int test_bit(unsigned long offset, const unsigned long *addr, unsigned long size);
 

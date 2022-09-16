@@ -28,8 +28,17 @@ class cpumask {
         unsigned int next(int n) {
             return find_next_bit(bits, NR_CPU, n);
         }
+
+        unsigned int next_and(int n, cpumask * mask_and) {
+            return find_next_bit_and(bits, mask_and->bits, NR_CPU, n);
+        }
+
         unsigned int first() {
             return find_first_bit(bits, NR_CPU);
+        }
+
+        unsigned int first_and(cpumask * mask_and) {
+            return find_first_bit_and(bits, mask_and->bits, NR_CPU);
         }
         int test_cpu(int n) {
             return test_bit(n, bits, NR_CPU);
