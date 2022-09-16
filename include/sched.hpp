@@ -324,7 +324,7 @@ class sched {
                 return;
             }
 
-            rq * busiest = find_busiest_queue(&env, group);
+            busiest = find_busiest_queue(&env, group);
             if (!busiest) {
                 out_balanced(env, sd_parent, sd, ld_moved);
                 return;
@@ -882,7 +882,7 @@ class sched {
         }
 
         int idle_cpu(int cpu) {
-            if (runqueues[cpu]->curr == idle) return 0;
+            if (runqueues[cpu]->curr != runqueues[cpu]->idle) return 0;
             if (runqueues[cpu]->nr_running) return 0;
             return 1;
 
