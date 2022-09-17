@@ -3,8 +3,6 @@
 
 # include "sched_domain.hpp"
 # include "task.hpp"
-# include "util.hpp"
-# include "load.hpp"
 
 extern int cur_pid;
 
@@ -53,6 +51,16 @@ class cfs_rq {
 
         int update_cfs_rq_load_avg(unsigned long now);
 
+        void detach_entity_cfs_rq(sched_entity * se) {
+            update_load_avg(se, 0);
+            detach_entity_load_avg(se);
+
+        }
+
+        void remove_entity_load_avg(sched_entity *se) {
+            // TODO:
+        }
+
             
     private:
 
@@ -65,6 +73,8 @@ class cfs_rq {
         unsigned long __sched_period(unsigned long nr_running);
 
         void enqueue_load_avg(sched_entity *se);
+
+        void dequeue_load_avg(sched_entity * se);
 
         void enqueue_runnable_load_avg (sched_entity * se);
 
@@ -85,6 +95,8 @@ class cfs_rq {
         void __dequeue_entity(sched_entity * se);
         
         sched_entity * __pick_next_entity(sched_entity * se);
+
+        void detach_entity_load_avg(sched_entity *se);
 };
 
 class rq {
@@ -196,7 +208,8 @@ class rq {
         void move_to_front_cfs_tasks(task *p);
 
         unsigned long cpu_avg_load_per_task();
-        
+
+        void migrate_task_rq(task * p);
 
 };
 

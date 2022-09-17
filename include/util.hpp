@@ -149,4 +149,12 @@
 
 #define MIN(a,b) ((a)<(b) ? (a):(b))
 
+#define TASK_ON_RQ_QUEUED	1
+#define TASK_ON_RQ_MIGRATING	2
+
+
+# define SCHED_FIXEDPOINT_SHIFT		10
+# define SCHED_CAPACITY_SHIFT	SCHED_FIXEDPOINT_SHIFT
+# define SCHED_CAPACITY_SCALE	(1L << SCHED_CAPACITY_SHIFT)
+
 # endif

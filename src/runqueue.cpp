@@ -247,6 +247,12 @@ void cfs_rq::enqueue_load_avg(sched_entity *se)
     avg->load_sum += se->weight * se->avg->load_sum;
 }
 
+void cfs_rq::dequeue_load_avg(sched_entity * se)
+{
+    avg->load_avg -= se->avg->load_avg;
+    avg->load_sum -= se->weight * se->avg->load_sum;
+}
+
 void cfs_rq::enqueue_runnable_load_avg (sched_entity * se) {
     // weight += se->weight;
     runnable_weight += se->runnable_weight;
@@ -318,24 +324,32 @@ void cfs_rq::__enqueue_entity(sched_entity * se) {
             leftmost = false;
         }
     }
-    rb_link_node(&se->run_node, parent, link);
-    rb_insert_color_cached(&se->run_node,
+    rb_link_node(*(&se->run_node), parent, link);
+    rb_insert_color_cached(*(&se->run_node),
                             &tasks_timeline, 
                             leftmost);
     return;
 }
 
 void cfs_rq::__dequeue_entity(sched_entity * se) {
-    rb_erase_cached(&se->run_node, &tasks_timeline);
+    rb_erase_cached(*(&se->run_node), &tasks_timeline);
 }
 
 
 sched_entity * cfs_rq::__pick_next_entity(sched_entity * se) {
-    rb_node *next = rb_next(&se->run_node);
+    rb_node *next = rb_next(*(&se->run_node));
     if (!next)
         return NULL;
 
     return next->se;
+}
+
+void cfs_rq::detach_entity_load_avg(sched_entity *se)
+{
+    /* runnable_load_avg is updated when doing deactivate_task */
+    dequeue_load_avg(se);
+    avg->util_avg -= se->avg->util_avg;
+    avg->util_sum -= se->avg->util_sum;
 }
 
 
@@ -691,4 +705,20 @@ unsigned long rq::cpu_avg_load_per_task()
         return load_avg / nr_running;
 
     return 0;
+}
+
+void rq::migrate_task_rq(task * p) {
+    if (p->state == TASK_WAKING) {
+        sched_entity *se = p->se;
+        unsigned long min_vruntime = cfs_runqueue->min_vruntime;
+        se->vruntime -= min_vruntime;
+    }
+    if (p->on_rq == TASK_ON_RQ_MIGRATING) {
+        cfs_runqueue->detach_entity_cfs_rq(p->se);
+    } else {
+        cfs_runqueue->remove_entity_load_avg(p->se);
+    }
+
+    p->se->avg->last_update_time = 0;
+    p->se->exec_start = 0;
 }

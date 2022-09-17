@@ -24,9 +24,6 @@
 #define SD_NUMA			0x4000	/* cross-node balancing */
 
 
-# define SCHED_FIXEDPOINT_SHIFT		10
-# define SCHED_CAPACITY_SHIFT	SCHED_FIXEDPOINT_SHIFT
-# define SCHED_CAPACITY_SCALE	(1L << SCHED_CAPACITY_SHIFT)
 
 class sched_domain_topology_level;
 

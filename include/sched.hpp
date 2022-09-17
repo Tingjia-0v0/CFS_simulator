@@ -1171,6 +1171,123 @@ class sched {
             /* print cpu_online_mask and cpu_topology */
         }
 
+        int can_migrate_task(task * p, struct lb_env *env) {
+            if (!p->cpus_allowed->test_cpu(env->dst_cpu)) {
+                int cpu;
+                env->flags |= LBF_SOME_PINNED;
+                if (env->cpu_idle == CPU_NEWLY_IDLE || (env->flags & LBF_DST_PINNED))
+                    return 0;
+                for_each_cpu_and(cpu, env->dst_grpmask, env->cpus) {
+                    if (p->cpus_allowed->test_cpu(cpu)) {
+                        env->flags |= LBF_DST_PINNED;
+                        env->new_dst_cpu = cpu;
+                        break;
+                    }
+                }
+
+                return 0;
+
+            }
+
+            env->flags &= ~LBF_ALL_PINNED;
+
+            if (p == env->src_rq->curr) {
+                return 0;
+            }
+            return 1;
+        }
+
+        void detach_task(task *p, struct lb_env *env) {
+            p->on_rq = TASK_ON_RQ_MIGRATING;
+            env->src_rq->deactivate_task(p, DEQUEUE_NOCLOCK);
+            set_task_cpu(p, env->dst_cpu);
+        }
+
+        void set_task_cpu(task * p, int new_cpu) {
+            if(p->cpu != new_cpu) {
+                // if (p->sched_class->migrate_task_rq)
+                runqueues[p->cpu]->migrate_task_rq(p);
+                p->se->nr_migrations++;
+            }
+            p->cpu = new_cpu;
+        }
+
+        int detach_tasks(struct lb_env *env) {
+            task * p;
+            unsigned long load;
+            int detached = 0;
+
+            if (env->imbalance <= 0)
+                return 0;
+
+            while (!env->src_rq->cfs_tasks.empty()) {
+                if (env->cpu_idle != CPU_NOT_IDLE && env->src_rq->nr_running <= 1)
+                    break;
+                p = *(env->src_rq->cfs_tasks.end());
+
+                env->loop ++;
+
+                if (env->loop > env->loop_max)
+                    break;
+
+                if (env->loop > env->loop_break) {
+                    env->loop_break += sched_nr_migrate_break;
+                    env->flags |= LBF_NEED_BREAK;
+                    break;
+                }
+
+                if (!can_migrate_task(p, env)){
+                    env->src_rq->move_to_front_cfs_tasks(p);
+                    continue;
+                }
+
+                load = p->se->avg->load_avg;
+
+                if (load < 16 && !env->sd->nr_balance_failed) {
+                    env->src_rq->move_to_front_cfs_tasks(p);
+                    continue;
+                }
+
+                if ((load / 2) > env->imbalance) {
+                    env->src_rq->move_to_front_cfs_tasks(p);
+                    continue;
+                }
+
+                detach_task(p, env);
+                env->tasks.insert(env->tasks.begin(), p);
+                detached++;
+                env->imbalance -= load;
+                if (env->cpu_idle == CPU_NEWLY_IDLE)
+                    break;
+                if (env->imbalance <= 0)
+                    break;
+
+            }
+            return detached;
+        }
+
+        void attach_task(struct rq *new_rq, task *p)
+        {
+
+            new_rq->activate_task(p, ENQUEUE_NOCLOCK);
+            p->on_rq = TASK_ON_RQ_QUEUED;
+            new_rq->check_preempt_curr(p, 0);
+        }
+        
+        void attach_tasks(struct lb_env *env) {
+            task * p;
+            while(!env->tasks.empty()) {
+                p = *(env->tasks.begin());
+                auto it = env->tasks.begin();
+                for(; it != env->tasks.end(); it++) {
+                    if(*it == p ) {
+                        env->tasks.erase(it);
+                        break;
+                    }
+                }
+                attach_task(env->dst_rq, p);
+            }
+        }
 };
 
 # endif
