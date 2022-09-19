@@ -10,7 +10,7 @@ void start_new_task(sched * global_sched, int cur_cpu, cpumask * cpu_allowed, in
 
 int main(int argc, char *argv[])
 {
-    sched * global_sched = new sched("/users/Tingjia/CFS_simulator/arch/lscpu_parsed.json");
+    sched * global_sched = new sched("/home/ke/project/CFS_simulator/arch/lscpu_parsed.json");
 
     // # ifdef DEBUG
     //     global_sched->debug_sched(0);
@@ -30,6 +30,12 @@ int main(int argc, char *argv[])
 
     jiffies += msecs_to_jiffies(20);
     global_sched->resched_all();
+    global_sched->debug_rqlen();
+
+    jiffies += msecs_to_jiffies(4);
+    
+    global_sched->scheduler_tick_all_cpus();
+
     global_sched->debug_rqlen();
 
 }

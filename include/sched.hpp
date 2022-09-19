@@ -161,6 +161,13 @@ class sched {
             } 
         }
 
+        void scheduler_tick_all_cpus() {
+            int i;
+            for_each_cpu(i, cpu_online_mask) {
+                scheduler_tick(i);
+            }
+        }
+
         void scheduler_tick(int dst_cpu) {
             runqueues[dst_cpu]->preempt_disable();
             runqueues[dst_cpu]->task_tick_fair(runqueues[dst_cpu]->curr, 0);
@@ -280,7 +287,7 @@ class sched {
             sched_domain *sd_parent = sd->parent;
             sched_group *group;
             rq *busiest;
-            cpumask *cpus;
+            cpumask *cpus = new cpumask();
 
             struct lb_env env = {
                 .sd		    = sd,
@@ -293,7 +300,7 @@ class sched {
                 .new_dst_cpu    = -1,
                 .cpu_idle		= cpu_idle,
                 .imbalance      = 0,
-                .cpus		    = new cpumask(cpu_online_mask),
+                .cpus		    = cpus,
                 .flags          = 0,
                 .loop           = 0,
                 .loop_break	= sched_nr_migrate_break,
@@ -332,7 +339,7 @@ class sched {
             env->src_cpu = busiest->cpu;
 	        env->src_rq = busiest;
 
-	        ld_moved = 0;
+	        *ld_moved = 0;
 
             if (busiest->nr_running > 1) {
                 /*
@@ -399,6 +406,7 @@ class sched {
                     * destination group that is receiving any migrated
                     * load.
                     */
+                   // cpus is a subset of dst_grp_mask
                     if (!cpumask::cpumask_subset(cpus, env->dst_grpmask)) {
                         env->loop = 0;
                         env->loop_break = sched_nr_migrate_break;
@@ -834,10 +842,9 @@ class sched {
             unsigned long load;
             int i, nr_running;
 
-            memset(sgs, 0, sizeof(*sgs));
-            cpumask * tmp = new cpumask();
-            cpumask::cpumask_and(tmp, group->span, env->cpus);
-            for_each_cpu(i, tmp) {
+            memset(sgs, 0, sizeof(sg_lb_stats));
+
+            for_each_cpu_and(i, group->span, env->cpus) {
                 load = runqueues[i]->cfs_runqueue->avg->runnable_load_avg;
                 
                 unsigned long util = runqueues[i]->cfs_runqueue->avg->util_avg; // 1024 * runnable %
@@ -1223,7 +1230,7 @@ class sched {
             while (!env->src_rq->cfs_tasks.empty()) {
                 if (env->cpu_idle != CPU_NOT_IDLE && env->src_rq->nr_running <= 1)
                     break;
-                p = *(env->src_rq->cfs_tasks.end());
+                p = env->src_rq->cfs_tasks.back();
 
                 env->loop ++;
 

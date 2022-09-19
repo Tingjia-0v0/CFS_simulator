@@ -11,6 +11,8 @@ sched_entity::sched_entity(int pid) {
 
     avg = new sched_avg();
 
+    run_node = new rb_node();
+
     run_node->vruntime = 0;
     run_node->color = RB_RED;
     run_node->rb_left = run_node->rb_right = run_node->rb_parent = NULL;
