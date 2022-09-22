@@ -19,8 +19,16 @@ online_cpus = cpu_info['online_cpus']
 
 online_cpu_masks = parse_cpu_range(online_cpus)
 
-cpu_topos = {}
+numa_neighbor_mask = []
 for node in cpu_info['nodes']:
+    neighbor_cpus = []
+    for neighbor_node in node['neighbor']:
+        neighbor_cpus += parse_cpu_range(cpu_info['nodes'][neighbor_node]["cpus"])
+    numa_neighbor_mask.append(neighbor_cpus)
+
+
+cpu_topos = {}
+for i, node in enumerate(cpu_info['nodes']):
     for core in node['cores']:
         for cpu in core['cpus']:
             thread_id = cpu
@@ -28,12 +36,14 @@ for node in cpu_info['nodes']:
             socket_id = node['id']
             thread_sibling = core['cpus']
             core_sibling = parse_cpu_range(node["cpus"])
+            numa_neighbor_sibling = numa_neighbor_mask[i]
             cpu_topos[thread_id] = {
                 "thread_id": thread_id,
                 "core_id": core_id,
                 "socket_id": socket_id,
                 "thread_sibling": thread_sibling,
-                "core_sibling": core_sibling
+                "core_sibling": core_sibling,
+                "numa_neighbor_sibling": numa_neighbor_sibling
             }
 
 print(online_cpu_masks)

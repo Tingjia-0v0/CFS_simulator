@@ -26,7 +26,8 @@ void
 __rb_rotate_set_parents(struct rb_node *old, struct rb_node *_new,
 			struct rb_root *root, int color)
 {
-    _new->rb_parent = old->rb_parent;
+	rb_node *parent = old->rb_parent;
+    _new->rb_parent = parent;
     _new->color = old->color;
     old->rb_parent = _new;
     old->color = color;
@@ -578,5 +579,4 @@ void debug_tasktimeline(struct rb_root_cached * tree) {
 	for(node = tree->rb_leftmost; node != NULL; node = rb_next(node)) {
 		std::cout << node->pid << ":" << node->vruntime << " ";
 	}
-	std::cout << std::endl;
 }

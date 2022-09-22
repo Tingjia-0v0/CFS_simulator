@@ -16,6 +16,7 @@ class cputopo {
         int socket_id;
         cpumask * thread_sibling;
         cpumask * core_sibling;
+        cpumask * numa_neighbor_sibling;
     public:
         const cpumask * get_smt_mask() {
             return thread_sibling;
@@ -23,12 +24,16 @@ class cputopo {
         const cpumask * get_coregroup_mask() {
             return core_sibling;
         }
+        const cpumask * get_one_hop_apart_mask() {
+            return numa_neighbor_sibling;
+        }
         cputopo(int _thread_id, int _core_id, int _socket_id) {
             thread_id = _thread_id;
             core_id = _core_id;
             socket_id = _socket_id;
             thread_sibling = new cpumask();
             core_sibling = new cpumask();
+            numa_neighbor_sibling = new cpumask();
         }
 };
 

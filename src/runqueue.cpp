@@ -62,14 +62,13 @@ void cfs_rq::enqueue_entity(sched_entity * se, int flags) {
     account_entity_enqueue(se);
 
     /*
-        * TODO:
-        * if (flags & ENQUEUE_WAKEUP)
-        *     place_entity(cfs_rq, se, 0);
-        */
-    
+     * TODO:
+     * if (flags & ENQUEUE_WAKEUP)
+     *     place_entity(cfs_rq, se, 0);
+     */
     if (!if_curr)
         __enqueue_entity(se);
-
+        
     se->on_rq = 1;
     debug_tasktimeline(&tasks_timeline);
 }

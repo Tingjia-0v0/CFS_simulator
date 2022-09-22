@@ -80,7 +80,7 @@ class sched_domain {
                 sched_group * sg;
                 if (covered->test_cpu(i)) 
                     continue;
-                sg = get_group(i);
+                sg = new sched_group(get_group(i));
                 cpumask::cpumask_or(covered, covered, sg->span);
 
                 if (!first)
@@ -135,6 +135,9 @@ static inline int cpu_smt_flags(void) {
 static inline int cpu_core_flags(void) {
     return SD_SHARE_PKG_RESOURCES;
 }
+static inline int cpu_numa_neighbor_flags(void) {
+    return 0;
+}
 static inline int cpu_node_flags(void) {
     return 0;
 }
@@ -153,6 +156,11 @@ static inline const cpumask * cpu_coregroup_mask(int cpu, cpumask * cpu_online_m
 static inline const cpumask * cpu_cpu_mask(int cpu, cpumask * cpu_online_mask, std::vector<cputopo *> & cpu_topology) {
     return cpu_online_mask;
 }
+static inline const cpumask * cpu_one_hop_apart_mask(int cpu, cpumask * cpu_online_mask, std::vector<cputopo *> & cpu_topology) {
+    cpumask * one_hop_apart_mask = new cpumask(cpu_topology[cpu]->get_one_hop_apart_mask());
+    int emp = cpumask::cpumask_and(one_hop_apart_mask, one_hop_apart_mask, cpu_online_mask);
+    return one_hop_apart_mask;
+} 
 
 
 
@@ -191,8 +199,10 @@ static std::vector<sched_domain_topology_level> default_topology = {
 	*(new sched_domain_topology_level( cpu_smt_mask, cpu_smt_flags )),
     /* cpus in the same socket */
 	*(new sched_domain_topology_level( cpu_coregroup_mask, cpu_core_flags )),
+    /* cpus in the hop-1 node*/
+    *(new sched_domain_topology_level( cpu_one_hop_apart_mask, cpu_numa_neighbor_flags)),
     /* all online cpus */
-	*(new sched_domain_topology_level( cpu_cpu_mask, cpu_node_flags ))
+	// *(new sched_domain_topology_level( cpu_cpu_mask, cpu_node_flags ))
 };
 
 

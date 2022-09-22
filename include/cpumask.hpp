@@ -79,6 +79,13 @@ class cpumask {
             return bitmap_subset(src1->bits, src2->bits, NR_CPU);
         }
 
+        static int cpumask_intersects(const cpumask * src1, const cpumask * src2) {
+            for(int i = 0; i < NR_CPU; i++)
+                if (src1->bits[i] == 1 && src2->bits[i] == 1)
+                    return 1;
+            return 0;
+        }
+
         
 };
 

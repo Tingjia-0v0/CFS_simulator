@@ -39,6 +39,13 @@ class sched_group {
 			sgc = new sched_group_capacity();
 			span = NULL;
 		}
+		sched_group(sched_group * sg) {
+			next = sg->next;
+			group_weight = sg->group_weight;
+			asym_prefer_cpu = sg->asym_prefer_cpu;
+			sgc = sg->sgc;
+			span = new cpumask(sg->span);
+		}
 
 		void debug_sched_group(int _level) {
 			int cpu;

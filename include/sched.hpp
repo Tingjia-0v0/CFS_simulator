@@ -556,10 +556,11 @@ class sched {
 
         /* TODO: consider spare metrics */
         sched_group * find_idlest_group (sched_domain * sd, task * p, int cur_cpu) {
+            // min_runnable_load + imbalance will increases the limit for unsigned long
             sched_group * idlest = NULL, *group = sd->groups;
-            unsigned long min_runnable_load = ULONG_MAX;
-            unsigned long this_runnable_load = ULONG_MAX;
-            unsigned long min_avg_load = ULONG_MAX, this_avg_load = ULONG_MAX;
+            unsigned long min_runnable_load = ULONG_MAX/100;
+            unsigned long this_runnable_load;
+            unsigned long min_avg_load = ULONG_MAX, this_avg_load = ULONG_MAX/100;
 
             int imbalance_scale = 100 + (sd->imbalance_pct-100)/2;
             /* imbalance = 1024 * 0.25, 
@@ -568,6 +569,9 @@ class sched {
             unsigned long imbalance = 
                             NICE_0_LOAD * (sd->imbalance_pct-100) / 100;
             do {
+                if (!cpumask::cpumask_intersects(group->span,
+                                                 p->cpus_allowed))
+                    continue;
                 unsigned long avg_load = 0, runnable_load = 0;
                 int local_group = group->span->test_cpu(cur_cpu);
                 int i;
@@ -1148,6 +1152,7 @@ class sched {
         }
 
         void init_cpus(const std::string & filename) {
+            cpu_online_mask = new cpumask();
             for (int i = 0; i < NR_CPU; i++) cpu_topology.push_back(NULL);
             std::ifstream ifs(filename);
             json data = json::parse(ifs);
@@ -1162,6 +1167,9 @@ class sched {
                     cpu_topology[std::stoi(el.key())]->thread_sibling->set(i);
                 for(auto & i: el.value()["core_sibling"])
                     cpu_topology[std::stoi(el.key())]->core_sibling->set(i);
+                for(auto & i: el.value()["numa_neighbor_sibling"]) {
+                    cpu_topology[std::stoi(el.key())]->numa_neighbor_sibling->set(i);
+                }
             }
         }
 
